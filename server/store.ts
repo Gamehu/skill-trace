@@ -33,34 +33,36 @@ class Store {
     const scanned = await scanSkills(cwds)
     const runs = [...this.sessions.values()].flatMap((s) => s.runs).sort((a, b) => b.startedAt - a.startedAt)
 
-    // Skills that ran from a directory we did not scan (e.g. bundled with Claude Code) are added from the run's base dir.
-    const knownDirs = new Set(scanned.map((s) => s.dir))
-    const extraDirs = new Set(runs.map((r) => r.baseDir).filter((d): d is string => !!d && !knownDirs.has(d)))
-    for (const dir of extraDirs) {
-      const s = await readSkill(dir, 'builtin')
-      if (s) scanned.push(s)
-    }
-
     const ids = new Map<string, number>()
     const skills: SkillEntry[] = scanned.map((s) => ({ ...s, id: uniqueId(ids, s.dirName) }))
 
-    // Whatever is left was invoked but has no SKILL.md on disk; fall back to the text captured in the transcript.
-    // Runs are newest first, so the entry is built from the latest version and later runs match it by name.
+    // A run that matches no scanned skill came from somewhere we don't scan: bundled with Claude Code, or
+    // since uninstalled. Read it from the directory it loaded from, else from the text captured in the
+    // transcript. Runs are newest first, so the entry reflects the latest version and older runs match it by name.
     for (const run of runs) {
-      run.skillId = matchSkill(run, skills)?.id ?? null
-      if (run.skillId) continue
-      const name = shortName(run.skill)
-      const { frontmatter, body } = parseSkillMarkdown(run.loaded ?? '')
-      const entry: SkillEntry = {
-        id: uniqueId(ids, name),
-        name,
-        dirName: name,
-        description: typeof frontmatter.description === 'string' ? frontmatter.description : firstParagraph(body),
-        source: 'builtin',
-        dir: run.baseDir ?? '',
-        frontmatter,
-        body,
+      const match = matchSkill(run, skills)
+      if (match) {
+        run.skillId = match.id
+        continue
       }
+      const name = shortName(run.skill)
+      const onDisk = run.baseDir ? await readSkill(run.baseDir, 'builtin') : null
+      const captured = parseSkillMarkdown(run.loaded ?? '')
+      const entry: SkillEntry = onDisk
+        ? { ...onDisk, id: uniqueId(ids, onDisk.dirName) }
+        : {
+            id: uniqueId(ids, name),
+            name,
+            dirName: name,
+            description:
+              typeof captured.frontmatter.description === 'string'
+                ? captured.frontmatter.description
+                : firstParagraph(captured.body),
+            source: 'builtin',
+            dir: run.baseDir ?? '',
+            frontmatter: captured.frontmatter,
+            body: captured.body,
+          }
       skills.push(entry)
       run.skillId = entry.id
     }
@@ -101,8 +103,9 @@ class Store {
     return this.runById.get(id) ?? null
   }
 
-  skillDirs(): string[] {
-    return this.skills.map((s) => s.dir).filter(Boolean)
+  /** Returns each project's `.claude/skills` directory that holds at least one skill. */
+  projectSkillRoots(): string[] {
+    return [...new Set(this.skills.filter((s) => s.source === 'project').map((s) => path.dirname(s.dir)))]
   }
 
   async readSkillFile(id: string, rel: string): Promise<string | null> {

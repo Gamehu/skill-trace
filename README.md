@@ -31,7 +31,7 @@ npm run dev     # http://localhost:5173
 
 - **Skill 列表**：`~/.claude/skills/*/SKILL.md`（user）、`~/.claude/plugins/**`（plugin）、各项目的 `.claude/skills/`（project）。内置 Skill 磁盘上没有 SKILL.md，内容取自会话记录中加载时注入的文本。
 - **运行过程**：`~/.claude/projects/*/*.jsonl` 会话记录。一次 Skill 运行从 `Skill` 工具调用（或 `/skill-name` 命令）开始，到下一条用户输入、下一次 Skill 调用或本轮回复结束为止，中间的工具调用、回复都算在这次运行里。
-- **实时更新**：用 chokidar 监听上述目录，有变化就通过 SSE 推送到页面。
+- **实时更新**：用 Node 原生 `fs.watch`（递归模式，macOS 下走 FSEvents）监听上述目录，有变化就通过 SSE 推送到页面。
 
 ## 页面
 
@@ -41,7 +41,7 @@ npm run dev     # http://localhost:5173
 
 ## 技术栈
 
-Node + TypeScript · Hono · chokidar · SSE · Vite · React · Tailwind CSS v4 · Shiki · d3-scale · Geist
+Node + TypeScript · Hono · fs.watch · SSE · Vite · React · Tailwind CSS v4 · Shiki · d3-scale · Geist
 
 ```
 server/   API、Skill 扫描、会话记录解析、文件监听

@@ -3,11 +3,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { watch } from 'chokidar'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { CLAUDE_HOME, PLUGINS_DIR, PORT, PROJECTS_DIR, USER_SKILLS_DIR } from './config.ts'
 import { store } from './store.ts'
+import { debouncer, watchTrees } from './watch.ts'
 import type { ServerEvent } from './types.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -58,32 +58,18 @@ if (fs.existsSync(path.join(distDir, 'index.html'))) {
 }
 
 function startWatcher() {
-  const timers = new Map<string, NodeJS.Timeout>()
-  const debounce = (key: string, fn: () => void) => {
-    clearTimeout(timers.get(key))
-    timers.set(
-      key,
-      setTimeout(() => {
-        timers.delete(key)
-        fn()
-      }, 250),
-    )
-  }
+  const debounce = debouncer(250)
 
-  const transcripts = watch(PROJECTS_DIR, {
-    ignoreInitial: true,
-    depth: 1,
-    ignored: (p, stats) => !!stats?.isFile() && !p.endsWith('.jsonl'),
-  })
-  const onTranscript = (file: string) =>
+  // Only top-level transcripts (<project>/<session>.jsonl); subagent logs live one level deeper.
+  watchTrees([PROJECTS_DIR], (file) => {
+    if (!file.endsWith('.jsonl') || path.dirname(path.dirname(file)) !== PROJECTS_DIR) return
     debounce(file, async () => {
       const id = await store.refreshSession(file)
       if (id) broadcast({ type: 'update', sessions: [id] })
     })
-  transcripts.on('add', onTranscript).on('change', onTranscript).on('unlink', onTranscript)
+  })
 
-  const skills = watch([USER_SKILLS_DIR, PLUGINS_DIR, ...store.skillDirs()], { ignoreInitial: true, depth: 6 })
-  skills.on('all', () =>
+  watchTrees([USER_SKILLS_DIR, PLUGINS_DIR, ...store.projectSkillRoots()], () =>
     debounce('skills', async () => {
       await store.rebuild()
       broadcast({ type: 'update', sessions: [] })

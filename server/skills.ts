@@ -36,7 +36,8 @@ async function findSkillDirs(root: string, maxDepth: number): Promise<string[]> 
     } catch {
       return
     }
-    if (entries.some((e) => e.isFile() && e.name === 'SKILL.md')) {
+    // SKILL.md is often a symlink (e.g. gstack links each skill into ~/.claude/skills).
+    if (entries.some((e) => (e.isFile() || e.isSymbolicLink()) && e.name === 'SKILL.md')) {
       out.push(dir)
       return
     }
@@ -84,6 +85,23 @@ export async function readSkill(dir: string, source: SkillSource): Promise<Omit<
   }
 }
 
+/**
+ * Lists install paths of the plugins Claude Code actually loads. The plugin cache also keeps
+ * superseded versions and marketplaces hold the whole catalog, so neither is scanned directly.
+ */
+async function installedPluginPaths(): Promise<string[]> {
+  try {
+    const raw = await fs.readFile(path.join(PLUGINS_DIR, 'installed_plugins.json'), 'utf8')
+    const data = JSON.parse(raw) as { plugins?: Record<string, { installPath?: unknown }[]> }
+    return Object.values(data.plugins ?? {})
+      .flat()
+      .map((p) => p.installPath)
+      .filter((p): p is string => typeof p === 'string')
+  } catch {
+    return []
+  }
+}
+
 /** Scans user, plugin and project skill directories. `projectDirs` are working directories seen in transcripts. */
 export async function scanSkills(projectDirs: string[]): Promise<Omit<SkillEntry, 'id'>[]> {
   const found: { dir: string; source: SkillSource }[] = []
@@ -93,18 +111,28 @@ export async function scanSkills(projectDirs: string[]): Promise<Omit<SkillEntry
     const nested = path.relative(USER_SKILLS_DIR, dir).includes(path.sep)
     found.push({ dir, source: nested ? 'plugin' : 'user' })
   }
-  for (const dir of await findSkillDirs(PLUGINS_DIR, 8)) found.push({ dir, source: 'plugin' })
-  for (const cwd of new Set(projectDirs)) {
+  for (const root of await installedPluginPaths()) {
+    for (const dir of await findSkillDirs(root, 4)) found.push({ dir, source: 'plugin' })
+  }
+  // Worktrees under .claude/worktrees carry copies of the main checkout's project skills.
+  const worktree = `${path.sep}.claude${path.sep}worktrees${path.sep}`
+  for (const cwd of new Set(projectDirs.filter((d) => !d.includes(worktree)))) {
     const root = path.join(cwd, '.claude', 'skills')
     if (await exists(root)) for (const dir of await findSkillDirs(root, 2)) found.push({ dir, source: 'project' })
   }
 
-  const seen = new Set<string>()
-  const skills = await Promise.all(
-    found
-      .filter(({ dir }) => !seen.has(dir) && seen.add(dir))
-      .map(({ dir, source }) => readSkill(dir, source)),
+  // The same SKILL.md can be reachable through several symlinked paths; keep the shallowest one,
+  // which is the path Claude Code loads it from.
+  const resolved = await Promise.all(
+    found.map(async (f) => ({ ...f, real: await fs.realpath(path.join(f.dir, 'SKILL.md')).catch(() => f.dir) })),
   )
+  const depth = (p: string) => p.split(path.sep).length
+  const byReal = new Map<string, (typeof resolved)[number]>()
+  for (const f of resolved) {
+    const prev = byReal.get(f.real)
+    if (!prev || depth(f.dir) < depth(prev.dir)) byReal.set(f.real, f)
+  }
+  const skills = await Promise.all([...byReal.values()].map(({ dir, source }) => readSkill(dir, source)))
   return skills.filter((s) => s !== null)
 }
 
