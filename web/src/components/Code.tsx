@@ -37,7 +37,7 @@ export function CodeBlock({ code, lang = 'text', wrap = false }: { code: string;
     import('shiki/bundle/web').then(async ({ codeToHtml, bundledLanguages }) => {
       const out = await codeToHtml(code, {
         lang: l in bundledLanguages ? l : 'text',
-        themes: { light: 'github-light', dark: 'github-dark-dimmed' },
+        themes: { light: 'github-light', dark: 'vesper' },
         defaultColor: false,
       })
       if (!cancelled) setHtml(out)

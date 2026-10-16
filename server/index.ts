@@ -17,6 +17,8 @@ const app = new Hono()
 const subscribers = new Set<(e: ServerEvent) => void>()
 const broadcast = (e: ServerEvent) => subscribers.forEach((fn) => fn(e))
 
+app.get('/api/overview', (c) => c.json(store.overview()))
+
 app.get('/api/skills', (c) => c.json(store.listSkills()))
 
 app.get('/api/skills/:id', async (c) => {

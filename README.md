@@ -35,13 +35,14 @@ npm run dev     # http://localhost:5173
 
 ## 页面
 
-- **Skills**：本机所有 Skill，按来源筛选，显示调用次数、平均耗时、最近一次运行。点进去可以看到渲染后的 SKILL.md、附带文件、30 天调用分布和历史运行。
+- **Overview**：总览。运行数、工具调用、token 走势，正在运行的 Skill（实时计时），星期 × 小时活跃热力图，最常用 Skill 排行和工具类型占比。
+- **Skills**：本机所有 Skill，按来源筛选。用过的以卡片展示（调用次数、平均耗时、14 天走势），没用过的折叠成紧凑列表。点进去可以看到渲染后的 SKILL.md、附带文件、30 天调用分布和历史运行。
 - **Runs**：所有 Skill 运行，每行带一个按时间排布的工具调用缩略图。
 - **Trace**：单次运行的瀑布图，按工具类型着色；点任意一步可以在右侧查看完整输入和输出。
 
 ## 技术栈
 
-Node + TypeScript · Hono · fs.watch · SSE · Vite · React · Tailwind CSS v4 · Shiki · d3-scale · Geist
+Node + TypeScript · Hono · fs.watch · SSE · Vite · React · Tailwind CSS v4 · Shiki · d3-scale · Geist / Instrument Serif
 
 ```
 server/   API、Skill 扫描、会话记录解析、文件监听

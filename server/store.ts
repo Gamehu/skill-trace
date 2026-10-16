@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { listSkillFiles, parseSkillMarkdown, readSkill, scanSkills, type SkillEntry } from './skills.ts'
 import { loadAllSessions, parseSessionFile, type ParsedSession } from './transcripts.ts'
-import type { RunDetail, RunSummary, SkillDetail, SkillStats, SkillSummary } from './types.ts'
+import type { DayBucket, Overview, RunDetail, RunSummary, SkillDetail, SkillStats, SkillSummary, ToolKind } from './types.ts'
 
 /** In-memory index over parsed transcripts and the skill catalog. Rebuilt incrementally on file changes. */
 class Store {
@@ -72,6 +72,43 @@ class Store {
     this.runById = new Map(runs.map((r) => [r.id, r]))
   }
 
+  overview(): Overview {
+    const runs = this.runs
+    const finished = runs.filter((r) => r.status !== 'running')
+    const heatmap = Array.from({ length: 7 }, () => Array<number>(24).fill(0))
+    const toolMix: Record<ToolKind, number> = { read: 0, write: 0, exec: 0, web: 0, mcp: 0, agent: 0, other: 0 }
+    for (const r of runs) {
+      const d = new Date(r.startedAt)
+      heatmap[(d.getDay() + 6) % 7][d.getHours()]++
+      for (const [, , kind] of r.shape) toolMix[kind]++
+    }
+    const summaries = this.listSkills()
+    return {
+      totals: {
+        runs: runs.length,
+        skillsUsed: summaries.filter((s) => s.stats.runs > 0).length,
+        skillsInstalled: summaries.filter((s) => s.source !== 'builtin').length,
+        toolCalls: runs.reduce((n, r) => n + r.toolCalls, 0),
+        outputTokens: runs.reduce((n, r) => n + r.tokens.output, 0),
+        inputTokens: runs.reduce((n, r) => n + r.tokens.input + r.tokens.cacheRead + r.tokens.cacheWrite, 0),
+        runsWithErrors: runs.filter((r) => r.errors > 0).length,
+        avgDurationMs: finished.length
+          ? Math.round(finished.reduce((n, r) => n + r.endedAt - r.startedAt, 0) / finished.length)
+          : null,
+      },
+      daily: dayBuckets(runs, 30),
+      heatmap,
+      topSkills: summaries
+        .filter((s) => s.stats.runs > 0)
+        .sort((a, b) => b.stats.runs - a.stats.runs || (b.stats.lastRunAt ?? 0) - (a.stats.lastRunAt ?? 0))
+        .slice(0, 8)
+        .map((s) => ({ id: s.id, name: s.name, source: s.source, ...s.stats })),
+      toolMix,
+      running: runs.filter((r) => r.status === 'running').map(stripRun),
+      recent: runs.slice(0, 6).map(stripRun),
+    }
+  }
+
   listSkills(): SkillSummary[] {
     return this.skills
       .map((s) => toSummary(s, this.runs.filter((r) => r.skillId === s.id)))
@@ -89,7 +126,7 @@ class Store {
       frontmatter: (fresh ?? s).frontmatter,
       body: fresh?.body ?? (s.body || null),
       files: s.dir ? await listSkillFiles(s.dir) : [],
-      daily: daily(runs, 30),
+      daily: dayBuckets(runs, 30).map(({ day, runs: n }) => ({ day, runs: n })),
       runs: runs.slice(0, 100).map(stripRun),
     }
   }
@@ -179,6 +216,7 @@ function toSummary(s: SkillEntry, runs: RunDetail[]): SkillSummary {
     source: s.source,
     dir: s.dir || null,
     stats: stats(runs),
+    spark: dayBuckets(runs, 14).map((d) => d.runs),
   }
 }
 
@@ -187,22 +225,25 @@ function stripRun(r: RunDetail): RunSummary {
   return summary
 }
 
-function daily(runs: RunDetail[], days: number) {
-  const out: { day: string; runs: number }[] = []
+/** Buckets runs into the last `days` local calendar days, oldest first. */
+function dayBuckets(runs: RunDetail[], days: number): DayBucket[] {
+  const buckets = new Map<string, DayBucket>()
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const counts = new Map<string, number>()
-  for (const r of runs) {
-    const key = dayKey(new Date(r.startedAt))
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today)
     d.setDate(d.getDate() - i)
-    const key = dayKey(d)
-    out.push({ day: key, runs: counts.get(key) ?? 0 })
+    const day = dayKey(d)
+    buckets.set(day, { day, runs: 0, toolCalls: 0, outputTokens: 0 })
   }
-  return out
+  for (const r of runs) {
+    const b = buckets.get(dayKey(new Date(r.startedAt)))
+    if (!b) continue
+    b.runs++
+    b.toolCalls += r.toolCalls
+    b.outputTokens += r.tokens.output
+  }
+  return [...buckets.values()]
 }
 
 function dayKey(d: Date) {

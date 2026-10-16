@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseTranscript } from './transcripts.ts'
+import { parseTranscript, promptLabel } from './transcripts.ts'
 
 const T0 = Date.parse('2026-10-16T08:00:00Z')
 const at = (s: number) => new Date(T0 + s * 1000).toISOString()
@@ -135,4 +135,10 @@ test('an unfinished run is running while the transcript is fresh and interrupted
 test('malformed and partial lines are skipped', () => {
   const raw = jsonl(assistant(1, 'm1', [toolUse('s', 'Skill', { skill: 'x' })])) + '\n{"type":"assistant","mess'
   assert.equal(parse(raw).runs.length, 1)
+})
+
+test('system-generated turns get readable prompt labels', () => {
+  assert.equal(promptLabel('<task-notification>\n<task-id>x</task-id>'), 'Background task finished')
+  assert.equal(promptLabel('<pasted_content id="a">\nfix this\n</pasted_content>'), 'fix this')
+  assert.equal(promptLabel('plain words'), 'plain words')
 })

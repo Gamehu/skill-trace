@@ -110,6 +110,13 @@ function firstLine(s: string, max = 240) {
   return line.length > max ? `${line.slice(0, max)}…` : line
 }
 
+/** Turns a user turn into a one-line label; system-generated turns get a readable description. */
+export function promptLabel(text: string): string {
+  if (text.startsWith('<task-notification>')) return 'Background task finished'
+  // Pasted content arrives wrapped in tags (e.g. <pasted_content id=…>); show the content itself.
+  return firstLine(text.replace(/<\/?pasted[^>]*>/g, ''), 400)
+}
+
 interface Builder {
   run: RunDetail
   msgIds: Set<string>
@@ -231,9 +238,9 @@ export function parseTranscript(
         finish('interrupted')
         continue
       }
-      // A new human prompt closes whatever skill run was in progress.
+      // A new turn closes whatever skill run was in progress.
       finish()
-      lastPrompt = firstLine(text, 400)
+      lastPrompt = promptLabel(text)
       continue
     }
 

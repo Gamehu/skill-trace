@@ -9,6 +9,8 @@ export interface SkillSummary {
   source: SkillSource
   dir: string | null
   stats: SkillStats
+  /** Runs per day over the last 14 days, oldest first. */
+  spark: number[]
 }
 
 export interface SkillStats {
@@ -80,6 +82,34 @@ export interface RunDetail extends RunSummary {
   loaded: string | null
   model: string | null
   events: TraceEvent[]
+}
+
+export interface DayBucket {
+  day: string
+  runs: number
+  toolCalls: number
+  outputTokens: number
+}
+
+export interface Overview {
+  totals: {
+    runs: number
+    skillsUsed: number
+    skillsInstalled: number
+    toolCalls: number
+    outputTokens: number
+    inputTokens: number
+    runsWithErrors: number
+    avgDurationMs: number | null
+  }
+  /** Last 30 days, oldest first. */
+  daily: DayBucket[]
+  /** Runs started per [weekday 0=Mon][hour 0-23], local time. */
+  heatmap: number[][]
+  topSkills: (Pick<SkillSummary, 'id' | 'name' | 'source'> & SkillStats)[]
+  toolMix: Record<ToolKind, number>
+  running: RunSummary[]
+  recent: RunSummary[]
 }
 
 export type ServerEvent = { type: 'update'; sessions: string[] } | { type: 'hello' }

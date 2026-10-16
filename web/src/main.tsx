@@ -4,6 +4,7 @@ import { Redirect, Route, Switch } from 'wouter'
 import { Layout } from './components/Layout.tsx'
 import { Empty } from './components/ui.tsx'
 import { LiveContext, useLiveConnection } from './lib/api.ts'
+import { OverviewView } from './views/Overview.tsx'
 import { RunsView } from './views/Runs.tsx'
 import { SkillDetailView } from './views/SkillDetail.tsx'
 import { SkillsView } from './views/Skills.tsx'
@@ -17,8 +18,9 @@ function App() {
       <Layout>
         <Switch>
           <Route path="/">
-            <Redirect to="/skills" />
+            <Redirect to="/overview" />
           </Route>
+          <Route path="/overview" component={OverviewView} />
           <Route path="/skills" component={SkillsView} />
           <Route path="/skills/:id">{(p) => <SkillDetailView id={p.id} />}</Route>
           <Route path="/runs" component={RunsView} />

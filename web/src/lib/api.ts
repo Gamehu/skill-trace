@@ -1,11 +1,21 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ServerEvent } from '../../../server/types.ts'
 
-/** Bumped whenever the server reports a transcript or skill change; data hooks refetch on change. */
-export const LiveContext = createContext<{ version: number; connected: boolean }>({ version: 0, connected: false })
+export interface LiveState {
+  /** Bumped whenever the server reports a transcript or skill change; data hooks refetch on change. */
+  version: number
+  connected: boolean
+}
 
-export function useLiveConnection() {
-  const [state, setState] = useState({ version: 0, connected: false })
+export const LiveContext = createContext<LiveState>({ version: 0, connected: false })
+
+/**
+ * Subscribes to the server's change stream, reconnecting after drops.
+ *
+ * @returns The live connection state to provide through {@link LiveContext}.
+ */
+export function useLiveConnection(): LiveState {
+  const [state, setState] = useState<LiveState>({ version: 0, connected: false })
   useEffect(() => {
     let es: EventSource | null = null
     let retry: ReturnType<typeof setTimeout>
@@ -31,7 +41,19 @@ export function useLiveConnection() {
   return state
 }
 
-export function useApi<T>(path: string | null): { data: T | undefined; error: string | null; loading: boolean } {
+export interface UseApiResult<T> {
+  data: T | undefined
+  error: string | null
+  loading: boolean
+}
+
+/**
+ * Fetches a JSON (or text) API resource and refetches it on every live update.
+ *
+ * @param path - API path, or null to skip fetching.
+ * @returns The latest data, error message and loading flag.
+ */
+export function useApi<T>(path: string | null): UseApiResult<T> {
   const { version } = useContext(LiveContext)
   const [data, setData] = useState<T>()
   const [error, setError] = useState<string | null>(null)
@@ -68,8 +90,12 @@ export function useApi<T>(path: string | null): { data: T | undefined; error: st
   return { data, error, loading }
 }
 
-/** Re-renders every `ms` while `active`, for live durations. */
-export function useNow(active: boolean, ms = 1000) {
+/**
+ * Re-renders every `ms` while `active`, for live durations.
+ *
+ * @returns The current timestamp in milliseconds.
+ */
+export function useNow(active: boolean, ms = 1000): number {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     if (!active) return
