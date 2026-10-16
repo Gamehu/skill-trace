@@ -1,0 +1,55 @@
+{
+  "name": "skill-trace",
+  "version": "0.1.0",
+  "description": "Local, live visualization of Claude Code skills and how they run",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "skill-trace": "bin/skill-trace.js"
+  },
+  "files": [
+    "bin",
+    "server",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c gray,blue \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "tsx watch server/index.ts",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "node bin/skill-trace.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test server/*.test.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "chokidar": "^5.0.0",
+    "hono": "^4.13.13",
+    "tsx": "^4.23.15",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/d3-scale": "^4.0.9",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.6",
+    "d3-scale": "^4.0.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "shiki": "^4.5.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "wouter": "^3.13.0"
+  }
+}
