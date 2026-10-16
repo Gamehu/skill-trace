@@ -25,6 +25,7 @@ export function PageHeader({ eyebrow, title, meta, actions }: PageHeaderProps) {
 
 const STATUS: Record<RunStatus, string> = {
   running: 'Running',
+  waiting: 'Waiting for you',
   done: 'Done',
   interrupted: 'Interrupted',
 }
@@ -37,13 +38,14 @@ interface StatusProps {
 export function StatusDot({ status, errors = 0 }: StatusProps) {
   const failed = errors > 0 && status !== 'running'
   const label = failed ? `${STATUS[status]} with ${errors} error${errors > 1 ? 's' : ''}` : STATUS[status]
-  const color = status === 'running' ? 'bg-signal' : failed ? 'bg-err' : status === 'interrupted' ? 'bg-warn' : 'bg-faint'
+  const active = status === 'running' || status === 'waiting'
+  const color = active ? 'bg-signal' : failed ? 'bg-err' : status === 'interrupted' ? 'bg-warn' : 'bg-faint'
   return (
     <span className="relative inline-flex size-2 shrink-0" title={label} aria-label={label}>
-      {status === 'running' && <span className="absolute inset-0 animate-ping rounded-full bg-signal" />}
+      {active && <span className={`absolute inset-0 rounded-full bg-signal ${status === 'waiting' ? 'animate-pulse' : 'animate-ping'}`} />}
       <span
-        className={`relative size-2 rounded-full ${color}`}
-        style={status === 'running' ? { boxShadow: '0 0 10px var(--signal)' } : undefined}
+        className={`relative size-2 ${status === 'waiting' ? 'rotate-45 rounded-[2px]' : 'rounded-full'} ${color}`}
+        style={active ? { boxShadow: '0 0 10px var(--signal)' } : undefined}
       />
     </span>
   )
@@ -51,7 +53,7 @@ export function StatusDot({ status, errors = 0 }: StatusProps) {
 
 export function StatusPill({ status, errors = 0 }: StatusProps) {
   const tone =
-    status === 'running'
+    status === 'running' || status === 'waiting'
       ? 'border-signal/40 bg-signal-soft text-signal'
       : errors > 0
         ? 'border-err/30 text-err'
@@ -60,7 +62,7 @@ export function StatusPill({ status, errors = 0 }: StatusProps) {
     <span className={`inline-flex h-6 items-center gap-2 rounded-full border px-2.5 font-mono text-[11px] uppercase tracking-[0.1em] ${tone}`}>
       <StatusDot status={status} errors={errors} />
       {STATUS[status]}
-      {errors > 0 && status !== 'running' && <span>· {errors} err</span>}
+      {errors > 0 && status !== 'running' && status !== 'waiting' && <span>· {errors} err</span>}
     </span>
   )
 }

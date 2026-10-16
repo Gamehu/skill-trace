@@ -142,3 +142,110 @@ test('system-generated turns get readable prompt labels', () => {
   assert.equal(promptLabel('<pasted_content id="a">\nfix this\n</pasted_content>'), 'fix this')
   assert.equal(promptLabel('plain words'), 'plain words')
 })
+
+test('questions, plans and replies stay in the run, with what the person chose', () => {
+  const { runs } = parse(
+    jsonl(
+      human(0, 'migrate the invoices table'),
+      assistant(1, 'm1', [toolUse('s', 'Skill', { skill: 'db-migrate' })]),
+      assistant(2, 'm2', [
+        toolUse('q1', 'AskUserQuestion', {
+          questions: [{ question: 'Which strategy?', header: 'Strategy', multiSelect: false, options: [{ label: 'Online', description: 'No lock' }, { label: 'Offline' }] }],
+        }),
+      ]),
+      { ...result(10, 'q1', 'The user answered: "Which strategy?"="Online"'), toolUseResult: { answers: { 'Which strategy?': 'Online' } } },
+      assistant(11, 'm3', [toolUse('p1', 'ExitPlanMode', { plan: '1. add column\n2. backfill' })]),
+      result(15, 'p1', "The user doesn't want to proceed with this tool use. To tell you how to proceed, the user said:\nbackfill in batches", true),
+      assistant(16, 'm4', [toolUse('w1', 'Bash', { command: 'rm -rf db/' })]),
+      result(18, 'w1', "The user doesn't want to proceed with this tool use. The tool use was rejected.", true),
+      assistant(19, 'm5', [{ type: 'text', text: 'Plan updated. Shall I apply it to staging?' }], 'end_turn'),
+      human(40, '确认'),
+      assistant(41, 'm6', [toolUse('e1', 'Edit', { file_path: '/work/app/db/m.sql', old_string: 'a\nb', new_string: 'a\nc\nd' })]),
+      result(42, 'e1', 'The file has been updated.'),
+      assistant(43, 'm7', [toolUse('w2', 'Write', { file_path: '/work/app/NOTES.md', content: 'one\ntwo' })]),
+      result(44, 'w2', 'File created successfully at: /work/app/NOTES.md'),
+      assistant(45, 'm8', [{ type: 'text', text: '## Done\nApplied **2** changes.' }], 'end_turn'),
+      human(60, 'now write the weekly report'),
+    ),
+  )
+  assert.equal(runs.length, 1)
+  const [run] = runs
+  assert.equal(run.input, 'migrate the invoices table')
+  assert.equal(run.status, 'done')
+  assert.equal(run.errors, 0, 'declines are decisions, not tool errors')
+  assert.equal(run.humanTurns, 4)
+
+  const ask = run.events.find((e) => e.type === 'ask')
+  assert.ok(ask?.type === 'ask')
+  assert.deepEqual(ask.answers, { 'Which strategy?': 'Online' })
+  assert.equal(ask.questions[0].options[1].description, null)
+
+  const plan = run.events.find((e) => e.type === 'plan')
+  assert.ok(plan?.type === 'plan')
+  assert.equal(plan.approved, false)
+  assert.equal(plan.feedback, 'backfill in batches')
+
+  const people = run.events.flatMap((e) => (e.type === 'human' ? [[e.kind, e.text, e.tool ?? null]] : []))
+  assert.deepEqual(people, [
+    ['reject', '', 'Bash'],
+    ['reply', '确认', null],
+  ])
+
+  assert.equal(run.outcome.text, '## Done\nApplied **2** changes.')
+  assert.equal(run.result, 'Done · Applied 2 changes.')
+  assert.deepEqual(
+    run.outcome.files.map((f) => [f.path, f.op, f.additions, f.deletions]),
+    [
+      ['db/m.sql', 'edit', 2, 1],
+      ['NOTES.md', 'create', 2, 0],
+    ],
+  )
+})
+
+test('a new request after the skill finished starts outside the run', () => {
+  const { runs } = parse(
+    jsonl(
+      assistant(1, 'm1', [toolUse('s', 'Skill', { skill: 'x' })]),
+      assistant(2, 'm2', [{ type: 'text', text: 'All done.' }], 'end_turn'),
+      human(10, 'refactor the auth module next'),
+      assistant(11, 'm3', [toolUse('t1', 'Read', { file_path: '/a' })]),
+      result(12, 't1', ''),
+    ),
+  )
+  assert.equal(runs[0].toolCalls, 0)
+  assert.equal(runs[0].humanTurns, 0)
+})
+
+test('steering: queued messages and instructions after an interruption belong to the run', () => {
+  const queued = (s: number, prompt: string) => ({
+    ...base,
+    type: 'attachment',
+    timestamp: at(s),
+    uuid: `q${s}`,
+    attachment: { type: 'queued_command', prompt, origin: { kind: 'human' } },
+  })
+  const { runs } = parse(
+    jsonl(
+      assistant(1, 'm1', [toolUse('s', 'Skill', { skill: 'x' })]),
+      assistant(2, 'm2', [toolUse('t1', 'Bash', { command: 'make' })]),
+      queued(3, 'also run the linter'),
+      result(4, 't1', 'ok'),
+      human(5, '[Request interrupted by user]'),
+      human(6, 'use pnpm instead of npm for everything'),
+      assistant(7, 'm3', [{ type: 'text', text: 'Switched to pnpm.' }], 'end_turn'),
+    ),
+  )
+  const people = runs[0].events.flatMap((e) => (e.type === 'human' ? [[e.kind, e.text]] : []))
+  assert.deepEqual(people, [
+    ['steer', 'also run the linter'],
+    ['interrupt', ''],
+    ['steer', 'use pnpm instead of npm for everything'],
+  ])
+  assert.equal(runs[0].status, 'done')
+})
+
+test('a skill that stopped to ask is waiting while the session is fresh', () => {
+  const raw = jsonl(assistant(1, 'm1', [toolUse('s', 'Skill', { skill: 'x' })]), assistant(2, 'm2', [{ type: 'text', text: '要我直接提交吗？' }], 'end_turn'))
+  assert.equal(parseTranscript(raw, { sessionId: 's1', project: 'app', mtimeMs: T0, now: T0 + 5000 }).runs[0].status, 'waiting')
+  assert.equal(parse(raw).runs[0].status, 'done')
+})

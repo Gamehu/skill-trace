@@ -28,7 +28,8 @@ export interface SkillDetail extends SkillSummary {
   runs: RunSummary[]
 }
 
-export type RunStatus = 'running' | 'done' | 'interrupted'
+/** `waiting`: the skill asked you something and the session is still open. */
+export type RunStatus = 'running' | 'waiting' | 'done' | 'interrupted'
 export type RunTrigger = 'model' | 'slash'
 
 export interface RunSummary {
@@ -49,6 +50,11 @@ export interface RunSummary {
   tokens: TokenUsage
   // Compact shape of the run for list sparklines: [offsetMs, durationMs, kind]
   shape: [number, number, ToolKind][]
+  /** First lines of the skill's final reply, plain text. */
+  result: string | null
+  /** Questions answered, plans reviewed, replies, interruptions and refusals by the person. */
+  humanTurns: number
+  filesChanged: number
 }
 
 export interface TokenUsage {
@@ -75,8 +81,43 @@ export type TraceEvent =
     }
   | { type: 'text'; id: string; text: string; at: number }
   | { type: 'thinking'; id: string; at: number }
+  /** AskUserQuestion: options Claude offered and what the person picked (free text when they typed their own). */
+  | { type: 'ask'; id: string; at: number; answeredAt: number | null; questions: AskQuestion[]; answers: Record<string, string> | null; declined: boolean }
+  /** ExitPlanMode: a plan put to the person for approval. */
+  | { type: 'plan'; id: string; at: number; answeredAt: number | null; plan: string; approved: boolean | null; feedback: string | null }
+  /** Something the person did inside the run. */
+  | { type: 'human'; id: string; at: number; kind: HumanKind; text: string; tool?: string }
+
+/**
+ * reply: answered after Claude stopped to ask; steer: typed while Claude was working;
+ * interrupt: pressed Esc; reject: declined a tool call when asked for permission.
+ */
+export type HumanKind = 'reply' | 'steer' | 'interrupt' | 'reject'
+
+export interface AskQuestion {
+  question: string
+  header: string | null
+  multiSelect: boolean
+  options: { label: string; description: string | null }[]
+}
+
+export interface FileChange {
+  path: string
+  /** create: the run wrote a new file; edit: it changed an existing one. */
+  op: 'create' | 'edit'
+  additions: number
+  deletions: number
+  edits: { old: string; new: string }[]
+}
 
 export interface RunDetail extends RunSummary {
+  /** The full text of the request that led to the skill. */
+  input: string | null
+  outcome: {
+    /** The skill's final reply (markdown). */
+    text: string | null
+    files: FileChange[]
+  }
   baseDir: string | null
   // The skill text as injected into the conversation when it loaded.
   loaded: string | null

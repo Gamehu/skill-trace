@@ -104,7 +104,7 @@ class Store {
         .slice(0, 8)
         .map((s) => ({ id: s.id, name: s.name, source: s.source, ...s.stats })),
       toolMix,
-      running: runs.filter((r) => r.status === 'running').map(stripRun),
+      running: runs.filter((r) => r.status === 'running' || r.status === 'waiting').map(stripRun),
       recent: runs.slice(0, 6).map(stripRun),
     }
   }
@@ -221,7 +221,7 @@ function toSummary(s: SkillEntry, runs: RunDetail[]): SkillSummary {
 }
 
 function stripRun(r: RunDetail): RunSummary {
-  const { events: _events, baseDir: _baseDir, loaded: _loaded, model: _model, ...summary } = r
+  const { events: _events, baseDir: _baseDir, loaded: _loaded, model: _model, input: _input, outcome: _outcome, ...summary } = r
   return summary
 }
 

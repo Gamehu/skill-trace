@@ -13,5 +13,5 @@
     "noUnusedLocals": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["server", "web/src", "vite.config.ts"]
+  "include": ["server", "scripts", "web/src", "vite.config.ts"]
 }

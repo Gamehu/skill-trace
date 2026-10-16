@@ -65,9 +65,13 @@ function LiveMonitor({ running }: { running: RunSummary[] }) {
               <Link href={`/runs/${r.id}`} className="block rounded-xl border border-signal/25 bg-signal-soft p-4 transition-colors hover:border-signal/50">
                 <div className="flex items-baseline justify-between gap-4">
                   <span className="display truncate text-[26px] text-fg">{r.skill}</span>
-                  <span className="tnum font-mono text-[20px] text-signal">{duration(now - r.startedAt)}</span>
+                  {r.status === 'waiting' ? (
+                    <span className="label shrink-0 text-signal">Waiting for you</span>
+                  ) : (
+                    <span className="tnum font-mono text-[20px] text-signal">{duration(now - r.startedAt)}</span>
+                  )}
                 </div>
-                <div className="mt-1 truncate text-fg-2">{r.prompt ?? r.project}</div>
+                <div className="mt-1 truncate text-fg-2">{r.status === 'waiting' && r.result ? r.result : (r.prompt ?? r.project)}</div>
                 <div className="mt-3">
                   <Shape run={r} now={now} width={520} height={18} fluid />
                 </div>
