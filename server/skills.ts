@@ -1,11 +1,15 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import YAML from 'yaml'
-import { PLUGINS_DIR, USER_SKILLS_DIR } from './config.ts'
-import type { SkillSource } from './types.ts'
+import { AGENT_IDS, resolvePath } from './settings.ts'
+import type { AgentId, Settings, SkillSource } from './types.ts'
 
 export interface SkillEntry {
   id: string
+  /** Stable identity for the skill selection: the folder, or `builtin:<name>` for skills not on disk. */
+  key: string
+  /** Agents that load this skill, by where it lives; empty for extra folders. */
+  agents: AgentId[]
   name: string
   dirName: string
   description: string
@@ -89,7 +93,9 @@ export function parseSkillMarkdown(raw: string): { frontmatter: Record<string, u
   return { frontmatter, body: raw.slice(m[0].length) }
 }
 
-export async function readSkill(dir: string, source: SkillSource): Promise<Omit<SkillEntry, 'id'> | null> {
+export type SkillFile = Omit<SkillEntry, 'id' | 'key' | 'agents'>
+
+export async function readSkill(dir: string, source: SkillSource): Promise<SkillFile | null> {
   let raw: string
   try {
     raw = await fs.readFile(path.join(dir, 'SKILL.md'), 'utf8')
@@ -113,9 +119,9 @@ export async function readSkill(dir: string, source: SkillSource): Promise<Omit<
  * Lists install paths of the plugins Claude Code actually loads. The plugin cache also keeps
  * superseded versions and marketplaces hold the whole catalog, so neither is scanned directly.
  */
-async function installedPluginPaths(): Promise<string[]> {
+async function installedPluginPaths(pluginsDir: string): Promise<string[]> {
   try {
-    const raw = await fs.readFile(path.join(PLUGINS_DIR, 'installed_plugins.json'), 'utf8')
+    const raw = await fs.readFile(path.join(pluginsDir, 'installed_plugins.json'), 'utf8')
     const data = JSON.parse(raw) as { plugins?: Record<string, { installPath?: unknown }[]> }
     return Object.values(data.plugins ?? {})
       .flat()
@@ -126,37 +132,69 @@ async function installedPluginPaths(): Promise<string[]> {
   }
 }
 
-/** Scans user, plugin and project skill directories. `projectDirs` are working directories seen in transcripts. */
-export async function scanSkills(projectDirs: string[]): Promise<Omit<SkillEntry, 'id'>[]> {
-  const found: { dir: string; source: SkillSource }[] = []
+/** Project-level skill folders inside a working directory, and the agents that read each. */
+export const PROJECT_SKILL_DIRS: [string, AgentId[]][] = [
+  [path.join('.claude', 'skills'), ['claude-code']],
+  [path.join('.codex', 'skills'), ['codex']],
+  [path.join('.opencode', 'skills'), ['opencode']],
+  [path.join('.agents', 'skills'), ['codex', 'opencode']],
+]
 
-  for (const dir of await findSkillDirs(USER_SKILLS_DIR, 4)) {
-    // ~/.claude/skills/<name> is authored by the user; anything nested deeper is synced from elsewhere.
-    const nested = path.relative(USER_SKILLS_DIR, dir).includes(path.sep)
-    found.push({ dir, source: nested ? 'plugin' : 'user' })
+type Found = { dir: string; source: SkillSource; agents: AgentId[] }
+
+/** Skills in a user-level root: direct children are the person's own, anything deeper was synced or installed. */
+async function fromRoot(root: string, agents: AgentId[]): Promise<Found[]> {
+  return (await findSkillDirs(root, 4)).map((dir) => ({
+    dir,
+    source: path.relative(root, dir).includes(path.sep) ? 'plugin' : 'user',
+    agents,
+  }))
+}
+
+/**
+ * Scans every enabled agent's skill folders, Claude Code's installed plugins, the extra folders, and
+ * the project-level folders of each working directory seen in sessions (`projectDirs`).
+ */
+export async function scanSkills(settings: Settings, projectDirs: string[]): Promise<(SkillFile & { agents: AgentId[] })[]> {
+  const enabled = AGENT_IDS.filter((id) => settings.agents[id].enabled)
+  const found: Found[] = []
+
+  for (const id of enabled) {
+    const a = settings.agents[id]
+    for (const root of a.skills) found.push(...(await fromRoot(resolvePath(root), [id])))
+    for (const pluginsDir of a.plugins) {
+      for (const root of await installedPluginPaths(resolvePath(pluginsDir))) {
+        for (const dir of await findSkillDirs(root, 4)) found.push({ dir, source: 'plugin', agents: [id] })
+      }
+    }
   }
-  for (const root of await installedPluginPaths()) {
-    for (const dir of await findSkillDirs(root, 4)) found.push({ dir, source: 'plugin' })
-  }
+  for (const root of settings.extraSkillDirs) found.push(...(await fromRoot(resolvePath(root), [])))
+
   // Worktrees under .claude/worktrees carry copies of the main checkout's project skills.
   const worktree = `${path.sep}.claude${path.sep}worktrees${path.sep}`
   for (const cwd of new Set(projectDirs.filter((d) => !d.includes(worktree)))) {
-    const root = path.join(cwd, '.claude', 'skills')
-    if (await exists(root)) for (const dir of await findSkillDirs(root, 2)) found.push({ dir, source: 'project' })
+    for (const [rel, agents] of PROJECT_SKILL_DIRS) {
+      const readers = agents.filter((id) => enabled.includes(id))
+      const root = path.join(cwd, rel)
+      if (!readers.length || !(await exists(root))) continue
+      for (const dir of await findSkillDirs(root, 2)) found.push({ dir, source: 'project', agents: readers })
+    }
   }
 
-  // The same SKILL.md can be reachable through several symlinked paths; keep the shallowest one,
-  // which is the path Claude Code loads it from.
-  const resolved = await Promise.all(
-    found.map(async (f) => ({ ...f, real: await fs.realpath(path.join(f.dir, 'SKILL.md')).catch(() => f.dir) })),
-  )
+  // The same SKILL.md can be reachable through several paths (symlinks, a folder shared by several
+  // agents); keep the shallowest path and every agent that reaches it.
+  const resolved = await Promise.all(found.map(async (f) => ({ ...f, real: await fs.realpath(path.join(f.dir, 'SKILL.md')).catch(() => f.dir) })))
   const depth = (p: string) => p.split(path.sep).length
-  const byReal = new Map<string, (typeof resolved)[number]>()
+  const byReal = new Map<string, Found>()
   for (const f of resolved) {
     const prev = byReal.get(f.real)
-    if (!prev || depth(f.dir) < depth(prev.dir)) byReal.set(f.real, f)
+    const agents = [...new Set([...(prev?.agents ?? []), ...f.agents])]
+    byReal.set(f.real, !prev || depth(f.dir) < depth(prev.dir) ? { ...f, agents } : { ...prev, agents })
   }
-  const skills = await Promise.all([...byReal.values()].map(({ dir, source }) => readSkill(dir, source)))
+  const skills = await Promise.all([...byReal.values()].map(async (f) => {
+    const s = await readSkill(f.dir, f.source)
+    return s && { ...s, agents: AGENT_IDS.filter((id) => f.agents.includes(id)) }
+  }))
   return skills.filter((s) => s !== null)
 }
 

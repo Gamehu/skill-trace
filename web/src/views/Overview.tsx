@@ -1,25 +1,30 @@
 import { useState } from 'react'
 import { Link } from 'wouter'
-import type { Overview, RunSummary } from '../../../server/types.ts'
+import type { AgentScope, Overview, RunSummary } from '../../../server/types.ts'
 import { Shape } from '../components/Shape.tsx'
 import { Empty, KindDot, Metric, SectionTitle } from '../components/ui.tsx'
 import { useApi, useNow } from '../lib/api.ts'
 import { compact, duration } from '../lib/format.ts'
 import { KINDS, kindColor } from '../lib/kinds.ts'
 import { RunTable } from './Runs.tsx'
+import { ReplayNotYet, ScopeTabs } from '../components/Scope.tsx'
+import { agentLabel, scoped, useScope, withScope, type AgentInfo } from '../lib/agents.ts'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-function Hero({ totals, running }: { totals: Overview['totals']; running: number }) {
+function Hero({ totals, running, scope }: { totals: Overview['totals']; running: number; scope: AgentScope }) {
   return (
-    <section className="rise px-6 pb-10 pt-12 sm:px-10">
-      <div className="label mb-5">Overview · all time on this machine</div>
+    <section className="rise px-6 pb-10 pt-10 sm:px-10">
+      <div className="mb-6">
+        <ScopeTabs count="runs" />
+      </div>
+      <div className="label mb-5">Overview · {scope ? agentLabel(scope) : 'all tools'} · all time on this machine</div>
       <h1 className="display max-w-5xl text-[52px] text-fg sm:text-[72px]">
         <span className="tnum italic text-signal">{totals.runs.toLocaleString()}</span> skill runs,{' '}
         <span className="tnum italic">{totals.toolCalls.toLocaleString()}</span> tool calls
       </h1>
       <p className="mt-5 max-w-2xl text-[14.5px] leading-relaxed text-fg-2">
-        <span className="text-fg">{totals.skillsUsed}</span> of {totals.skillsInstalled} installed skills have been used.{' '}
+        <span className="text-fg">{totals.skillsUsed}</span> of {totals.skillsInstalled} tracked skills have been used.{' '}
         {running > 0 ? (
           <span className="text-signal">
             {running} {running === 1 ? 'is' : 'are'} active right now.
@@ -154,11 +159,11 @@ function Heatmap({ grid }: { grid: number[][] }) {
   )
 }
 
-function TopSkills({ skills }: { skills: Overview['topSkills'] }) {
+function TopSkills({ skills, scope }: { skills: Overview['topSkills']; scope: AgentScope }) {
   const max = Math.max(1, ...skills.map((s) => s.runs))
   return (
     <div className="glass rise p-6" style={{ ['--i' as string]: 7 }}>
-      <SectionTitle aside={<Link href="/skills" className="hover:text-fg">All skills →</Link>}>Most used · all time</SectionTitle>
+      <SectionTitle aside={<Link href={withScope('/skills', scope)} className="hover:text-fg">All skills →</Link>}>Most used · all time</SectionTitle>
       <div className="label -mt-2 mb-2 flex justify-end gap-4 text-[9.5px]">
         <span>Runs</span>
         <span className="w-16 whitespace-nowrap text-right">Avg time</span>
@@ -192,56 +197,65 @@ function TopSkills({ skills }: { skills: Overview['topSkills'] }) {
 }
 
 export function OverviewView() {
-  const { data, error } = useApi<Overview>('/api/overview')
+  const [scope] = useScope()
+  const { data, error } = useApi<Overview>(scoped('/api/overview', scope))
+  const { data: agents } = useApi<AgentInfo[]>('/api/agents')
   if (error) return <Empty title="Could not reach the recorder.">{error}</Empty>
   if (!data) return null
   const { totals, daily } = data
   const errorRate = totals.runs ? Math.round((totals.runsWithErrors / totals.runs) * 100) : 0
+  const noReplay = scope && agents?.find((a) => a.id === scope)?.replay === false
 
   return (
     <>
-      <Hero totals={totals} running={data.running.length} />
-      <div className="space-y-4 px-6 sm:px-10">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric index={0} label="Runs · last 30 days" value={daily.reduce((n, d) => n + d.runs, 0)} hint="Line: runs per day" spark={daily.map((d) => d.runs)} />
-          <Metric
-            index={1}
-            label="Tool calls · last 30 days"
-            value={compact(daily.reduce((n, d) => n + d.toolCalls, 0))}
-            hint={`${(totals.toolCalls / Math.max(1, totals.runs)).toFixed(1)} per run on average`}
-            spark={daily.map((d) => d.toolCalls)}
-          />
-          <Metric
-            index={2}
-            label="Output tokens · last 30 days"
-            value={compact(daily.reduce((n, d) => n + d.outputTokens, 0))}
-            hint={`${compact(totals.outputTokens)} all time`}
-            spark={daily.map((d) => d.outputTokens)}
-          />
-          <Metric
-            index={3}
-            label="Average run · all time"
-            value={duration(totals.avgDurationMs)}
-            hint={<span className={errorRate ? 'text-err' : ''}>{errorRate}% of runs had a failed step</span>}
-          />
+      <Hero totals={totals} running={data.running.length} scope={scope} />
+      {noReplay ? (
+        <div className="px-6 sm:px-10">
+          <ReplayNotYet agent={scope} />
         </div>
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <LiveMonitor running={data.running} />
-          <ToolMix mix={data.toolMix} />
+      ) : (
+        <div className="space-y-4 px-6 sm:px-10">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric index={0} label="Runs · last 30 days" value={daily.reduce((n, d) => n + d.runs, 0)} hint="Line: runs per day" spark={daily.map((d) => d.runs)} />
+            <Metric
+              index={1}
+              label="Tool calls · last 30 days"
+              value={compact(daily.reduce((n, d) => n + d.toolCalls, 0))}
+              hint={`${(totals.toolCalls / Math.max(1, totals.runs)).toFixed(1)} per run on average`}
+              spark={daily.map((d) => d.toolCalls)}
+            />
+            <Metric
+              index={2}
+              label="Output tokens · last 30 days"
+              value={compact(daily.reduce((n, d) => n + d.outputTokens, 0))}
+              hint={`${compact(totals.outputTokens)} all time`}
+              spark={daily.map((d) => d.outputTokens)}
+            />
+            <Metric
+              index={3}
+              label="Average run · all time"
+              value={duration(totals.avgDurationMs)}
+              hint={<span className={errorRate ? 'text-err' : ''}>{errorRate}% of runs had a failed step</span>}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <LiveMonitor running={data.running} />
+            <ToolMix mix={data.toolMix} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <Heatmap grid={data.heatmap} />
+            <TopSkills skills={data.topSkills} scope={scope} />
+          </div>
+          {data.recent.length > 0 && (
+            <section className="glass rise overflow-hidden pt-6" style={{ ['--i' as string]: 8 }}>
+              <div className="px-6">
+                <SectionTitle aside={<Link href={withScope('/runs', scope)} className="hover:text-fg">All runs →</Link>}>Latest runs</SectionTitle>
+              </div>
+              <RunTable runs={data.recent} />
+            </section>
+          )}
         </div>
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Heatmap grid={data.heatmap} />
-          <TopSkills skills={data.topSkills} />
-        </div>
-        {data.recent.length > 0 && (
-          <section className="glass rise overflow-hidden pt-6" style={{ ['--i' as string]: 8 }}>
-            <div className="px-6">
-              <SectionTitle aside={<Link href="/runs" className="hover:text-fg">All runs →</Link>}>Latest runs</SectionTitle>
-            </div>
-            <RunTable runs={data.recent} />
-          </section>
-        )}
-      </div>
+      )}
     </>
   )
 }

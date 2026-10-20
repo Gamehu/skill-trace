@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'wouter'
 import type { SkillSource, SkillSummary } from '../../../server/types.ts'
+import { AgentTags, ScopeTabs } from '../components/Scope.tsx'
 import { Empty, PageHeader, SearchInput, Segmented, SourceTag, Sparkline } from '../components/ui.tsx'
+import { agentLabel, scoped, useScope } from '../lib/agents.ts'
 import { useApi, useNow } from '../lib/api.ts'
 import { ago, duration } from '../lib/format.ts'
 
@@ -26,7 +28,8 @@ function SkillCard({ skill, index, now }: { skill: SkillSummary; index: number; 
       <div className="flex items-start justify-between gap-3">
         <span className="min-w-0">
           <span className="display block truncate text-[28px] text-fg">{skill.name}</span>
-          <span className="mt-1.5 flex items-center gap-2">
+          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <AgentTags agents={skill.agents} />
             <SourceTag source={skill.source} />
             <span className="label text-[10px]">{ago(stats.lastRunAt, now)}</span>
           </span>
@@ -65,13 +68,18 @@ function DormantSkill({ skill }: { skill: SkillSummary }) {
         <span className="block truncate font-mono text-[12.5px] text-fg-2 group-hover:text-fg">{skill.name}</span>
         <span className="block truncate text-[11.5px] text-faint">{skill.description || 'No description.'}</span>
       </span>
-      <SourceTag source={skill.source} />
+      <span className="flex shrink-0 gap-1">
+        <AgentTags agents={skill.agents} />
+        <SourceTag source={skill.source} />
+      </span>
     </Link>
   )
 }
 
 export function SkillsView() {
-  const { data, error } = useApi<SkillSummary[]>('/api/skills')
+  const [scope] = useScope()
+  const { data: payload, error } = useApi<{ skills: SkillSummary[]; untracked: number }>(scoped('/api/skills', scope))
+  const data = payload?.skills
   const [filter, setFilter] = useState<Filter>('all')
   const [q, setQ] = useState('')
   const now = useNow(true, 30_000)
@@ -98,7 +106,7 @@ export function SkillsView() {
   return (
     <>
       <PageHeader
-        eyebrow="All skills on this machine"
+        eyebrow={`Skills · ${scope ? agentLabel(scope) : 'all tools'}`}
         title={
           <>
             Skills<span className="italic text-signal">.</span>
@@ -106,23 +114,43 @@ export function SkillsView() {
         }
         meta={
           <span>
-            <span className="text-fg">{counts.all}</span> found on this machine ·{' '}
+            <span className="text-fg">{counts.all}</span> tracked ·{' '}
             <span className="text-fg">{data.filter((s) => s.stats.runs > 0).length}</span> have run
+            {payload.untracked > 0 && (
+              <>
+                {' · '}
+                <Link href="/settings#skills" className="underline decoration-line-strong underline-offset-4 hover:text-fg">
+                  {payload.untracked} not tracked
+                </Link>
+              </>
+            )}
           </span>
         }
         actions={<SearchInput value={q} onChange={setQ} placeholder="Filter skills" />}
       />
-      <div className="rise px-6 pb-8 sm:px-10" style={{ ['--i' as string]: 1 }}>
-        <Segmented
-          value={filter}
-          onChange={setFilter}
-          options={FILTERS.filter(([v]) => v === 'all' || counts[v] > 0).map(([value, label]) => ({ value, label, count: counts[value] }))}
-        />
+      <div className="rise space-y-3 px-6 pb-8 sm:px-10" style={{ ['--i' as string]: 1 }}>
+        <ScopeTabs count="skills" />
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="label text-[10px]">Type</span>
+          <Segmented
+            value={filter}
+            onChange={setFilter}
+            options={FILTERS.filter(([v]) => v === 'all' || counts[v] > 0).map(([value, label]) => ({ value, label, count: counts[value] }))}
+          />
+        </div>
       </div>
 
       {rows.length === 0 && (
-        <Empty title={data.length ? 'Nothing matches.' : 'No skills yet.'}>
-          {!data.length && 'Skills are read from ~/.claude/skills, installed plugins, and each project’s .claude/skills.'}
+        <Empty title={data.length ? 'Nothing matches.' : `No ${scope ? agentLabel(scope) + ' ' : ''}skills found.`}>
+          {!data.length && (
+            <>
+              Check the folders skill-trace reads in{' '}
+              <Link href="/settings" className="text-fg underline decoration-line-strong underline-offset-4">
+                Settings
+              </Link>
+              .
+            </>
+          )}
         </Empty>
       )}
 

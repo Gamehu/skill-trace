@@ -12,6 +12,9 @@ import path from 'node:path'
 
 const HOME = path.join(os.tmpdir(), 'skill-trace-demo')
 const CODE = path.join(HOME, 'code')
+const CODEX_HOME = path.join(HOME, 'agents', 'codex')
+const XDG_CONFIG = path.join(HOME, 'agents', 'config')
+const XDG_DATA = path.join(HOME, 'agents', 'data')
 
 // ---------------------------------------------------------------------------------------------
 // Seeded randomness
@@ -518,6 +521,31 @@ function writeSkills() {
   fs.writeFileSync(path.join(HOME, 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins }, null, 2))
 }
 
+/** A few Codex and OpenCode skills (listed only: their sessions are not replayed yet), one shared by symlink. */
+function writeOtherAgents() {
+  const skill = (dir: string, name: string, description: string, body: string) => {
+    fs.mkdirSync(path.join(dir, name), { recursive: true })
+    fs.writeFileSync(path.join(dir, name, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}`)
+  }
+  const codexSkills = path.join(CODEX_HOME, 'skills')
+  skill(codexSkills, 'refactor-plan', 'Break a large refactor into safe, reviewable steps before touching code.', '# Refactor plan\n\nList the seams first, then the order of changes.\n')
+  skill(codexSkills, 'test-writer', 'Write focused unit tests for the function under the cursor: happy path, edges, failures.', '# Test writer\n\nOne behavior per test.\n')
+  // pr-review is shared with Codex through a symlink, the way people often reuse skills.
+  fs.symlinkSync(path.join(HOME, 'skills', 'pr-review'), path.join(codexSkills, 'pr-review'))
+  for (let i = 0; i < 6; i++) {
+    const day = path.join(CODEX_HOME, 'sessions', '2026', '10', String(10 + i))
+    fs.mkdirSync(day, { recursive: true })
+    fs.writeFileSync(path.join(day, `rollout-demo-${i}.jsonl`), '{}\n')
+  }
+
+  skill(path.join(XDG_CONFIG, 'opencode', 'skills'), 'changelog-check', 'Check that every user-facing change in the diff has a changelog entry.', '# Changelog check\n')
+  fs.mkdirSync(path.join(XDG_DATA, 'opencode', 'storage', 'session'), { recursive: true })
+  for (let i = 0; i < 3; i++) fs.writeFileSync(path.join(XDG_DATA, 'opencode', 'storage', 'session', `ses_demo${i}.json`), '{}\n')
+
+  // Project skills in .agents/skills are read by both Codex and OpenCode.
+  skill(path.join(cwdOf('atlas-web'), '.agents', 'skills'), 'lint-fix', 'Run the linters and fix what they report, without changing behavior.', '# Lint fix\n')
+}
+
 // ---------------------------------------------------------------------------------------------
 // Transcript generation
 
@@ -714,9 +742,15 @@ fs.rmSync(HOME, { recursive: true, force: true })
 for (const p of PROJECTS) fs.mkdirSync(cwdOf(p), { recursive: true })
 fs.mkdirSync(path.join(HOME, 'plugins'), { recursive: true })
 writeSkills()
+writeOtherAgents()
 writeHistory()
 
+// Point every agent, and skill-trace's own settings file, at the demo folders.
 process.env.SKILL_TRACE_CLAUDE_HOME = HOME
+process.env.CODEX_HOME = CODEX_HOME
+process.env.XDG_CONFIG_HOME = XDG_CONFIG
+process.env.XDG_DATA_HOME = XDG_DATA
+process.env.SKILL_TRACE_CONFIG = path.join(HOME, 'skill-trace-settings.json')
 await import('../server/index.ts')
 if (!process.argv.includes('--static')) startLiveSession()
 console.log(`             demo data in ${HOME}${process.argv.includes('--static') ? '' : ' (one session is live)'}`)
