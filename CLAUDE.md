@@ -1,6 +1,6 @@
 # skill-trace
 
-Local, read-only dashboard for Claude Code skills and their runs. See README.md.
+Local dashboard for Claude Code, Codex and OpenCode skills and their runs. It reads their folders and writes only its own settings file. See README.md.
 
 ## Commits
 

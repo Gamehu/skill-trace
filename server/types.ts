@@ -2,8 +2,67 @@
 
 export type SkillSource = 'user' | 'project' | 'plugin' | 'builtin'
 
+/** The coding agents whose skills and sessions can be read. */
+export type AgentId = 'claude-code' | 'codex' | 'opencode'
+
+export interface AgentSettings {
+  enabled: boolean
+  /** Folders holding user-level skills (each skill is a sub-folder with a SKILL.md). */
+  skills: string[]
+  /** Folders holding session logs. */
+  sessions: string[]
+  /** Claude Code: the plugins folder holding installed_plugins.json. */
+  plugins: string[]
+}
+
+/**
+ * all-except: track every skill except `keys` (new skills are tracked automatically).
+ * only: track just `keys` (new skills stay out until picked).
+ */
+export interface SkillFilter {
+  mode: 'all-except' | 'only'
+  keys: string[]
+}
+
+export interface Settings {
+  agents: Record<AgentId, AgentSettings>
+  /** More skill folders to read, beyond each agent's own. */
+  extraSkillDirs: string[]
+  skillFilter: SkillFilter
+}
+
+export interface PathStatus {
+  path: string
+  exists: boolean
+}
+
+export interface AgentStatus {
+  skills: PathStatus[]
+  sessions: PathStatus[]
+  plugins: PathStatus[]
+  skillCount: number
+  sessionFiles: number
+  /** Whether this agent's sessions can be replayed yet (skills are listed either way). */
+  replay: boolean
+}
+
+export interface SettingsPayload {
+  /** Where the settings are saved. */
+  file: string
+  settings: Settings
+  defaults: Settings
+  status: Record<AgentId, AgentStatus>
+  extraStatus: PathStatus[]
+  /** Every skill found with the current folders, tracked or not. */
+  skills: { key: string; name: string; description: string; source: SkillSource; agents: AgentId[]; runs: number; tracked: boolean }[]
+}
+
 export interface SkillSummary {
   id: string
+  /** Stable identity used by the skill selection in settings. */
+  key: string
+  /** Agents that load this skill, by where it lives (empty for extra folders). */
+  agents: AgentId[]
   name: string
   description: string
   source: SkillSource
@@ -34,6 +93,7 @@ export type RunTrigger = 'model' | 'slash'
 
 export interface RunSummary {
   id: string
+  agent: AgentId
   skill: string
   skillId: string | null
   args: string | null
@@ -152,5 +212,8 @@ export interface Overview {
   running: RunSummary[]
   recent: RunSummary[]
 }
+
+/** Overview, Skills and Runs can be scoped to one agent; `null` means all. */
+export type AgentScope = AgentId | null
 
 export type ServerEvent = { type: 'update'; sessions: string[] } | { type: 'hello' }

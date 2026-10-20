@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'wouter'
 import type { SkillDetail } from '../../../server/types.ts'
 import { CodeBlock, SkillMarkdown, langFromPath } from '../components/Code.tsx'
+import { AgentTags } from '../components/Scope.tsx'
 import { Empty, Metric, PageHeader, SectionTitle, SourceTag } from '../components/ui.tsx'
 import { useApi } from '../lib/api.ts'
 import { ago, duration } from '../lib/format.ts'
@@ -87,6 +88,7 @@ export function SkillDetailView({ id }: { id: string }) {
               Skills
             </Link>
             <span className="text-faint">/</span>
+            <AgentTags agents={skill.agents} />
             <SourceTag source={skill.source} />
           </>
         }

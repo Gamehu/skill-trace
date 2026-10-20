@@ -1,6 +1,7 @@
 import { useContext, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'wouter'
 import { LiveContext, useNow } from '../lib/api.ts'
+import { useScope, withScope } from '../lib/agents.ts'
 import { ago } from '../lib/format.ts'
 
 /** Three trace bars. */
@@ -19,17 +20,19 @@ function Logo() {
 }
 
 const NAV = [
-  { href: '/overview', label: 'Overview', n: '01' },
-  { href: '/skills', label: 'Skills', n: '02' },
-  { href: '/runs', label: 'Runs', n: '03' },
+  { href: '/overview', label: 'Overview', n: '01', scoped: true },
+  { href: '/skills', label: 'Skills', n: '02', scoped: true },
+  { href: '/runs', label: 'Runs', n: '03', scoped: true },
+  { href: '/settings', label: 'Settings', n: '04', scoped: false },
 ]
 
-function NavLink({ href, label, n }: (typeof NAV)[number]) {
+function NavLink({ href, label, n, scoped }: (typeof NAV)[number]) {
   const [loc] = useLocation()
+  const [scope] = useScope()
   const active = loc === href || loc.startsWith(href + '/')
   return (
     <Link
-      href={href}
+      href={scoped ? withScope(href, scope) : href}
       className={`group relative flex h-9 items-center gap-3 rounded-lg px-3 transition-colors ${
         active ? 'bg-raised text-fg' : 'text-muted hover:bg-hover hover:text-fg'
       }`}
@@ -55,7 +58,7 @@ function LiveStatus({ connected, updatedAt }: { connected: boolean; updatedAt: n
           ? 'Lost the local server; retrying every few seconds.'
           : updatedAt
             ? `New activity ${ago(updatedAt, now)}. Pages update on their own.`
-            : 'Pages update on their own when Claude Code writes to ~/.claude.'}
+            : 'Pages update on their own as your coding agents work.'}
       </p>
     </div>
   )

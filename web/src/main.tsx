@@ -6,6 +6,7 @@ import { Empty } from './components/ui.tsx'
 import { LiveContext, useLiveConnection } from './lib/api.ts'
 import { OverviewView } from './views/Overview.tsx'
 import { RunsView } from './views/Runs.tsx'
+import { SettingsView } from './views/Settings.tsx'
 import { SkillDetailView } from './views/SkillDetail.tsx'
 import { SkillsView } from './views/Skills.tsx'
 import { TraceView } from './views/Trace.tsx'
@@ -25,6 +26,7 @@ function App() {
           <Route path="/skills/:id">{(p) => <SkillDetailView id={p.id} />}</Route>
           <Route path="/runs" component={RunsView} />
           <Route path="/runs/:id">{(p) => <TraceView id={p.id} />}</Route>
+          <Route path="/settings" component={SettingsView} />
           <Route>
             <Empty title="Nothing here." />
           </Route>

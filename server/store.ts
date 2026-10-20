@@ -1,8 +1,29 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { AGENT_IDS, detectDefaults, getSettings, resolvePath, settingsFile } from './settings.ts'
 import { listSkillFiles, parseSkillMarkdown, readSkill, scanSkills, type SkillEntry } from './skills.ts'
-import { loadAllSessions, parseSessionFile, type ParsedSession } from './transcripts.ts'
-import type { DayBucket, Overview, RunDetail, RunSummary, SkillDetail, SkillStats, SkillSummary, ToolKind } from './types.ts'
+import { listSessionFiles, loadAllSessions, parseSessionFile, type ParsedSession } from './transcripts.ts'
+import type {
+  AgentId,
+  AgentScope,
+  AgentStatus,
+  DayBucket,
+  Overview,
+  PathStatus,
+  RunDetail,
+  RunSummary,
+  SettingsPayload,
+  SkillDetail,
+  SkillStats,
+  SkillSummary,
+  ToolKind,
+} from './types.ts'
+
+/** Claude Code session folders in effect (none when Claude Code is turned off). */
+function claudeSessionDirs() {
+  const a = getSettings().agents['claude-code']
+  return a.enabled ? a.sessions.map((p) => resolvePath(p)) : []
+}
 
 /** In-memory index over parsed transcripts and the skill catalog. Rebuilt incrementally on file changes. */
 class Store {
@@ -12,8 +33,28 @@ class Store {
   private runById = new Map<string, RunDetail>()
 
   async init() {
-    for (const s of await loadAllSessions()) this.sessions.set(s.file, s)
+    await this.reload()
+  }
+
+  /** Re-reads every session and skill, e.g. after the folders in settings changed. */
+  async reload() {
+    this.sessions = new Map((await loadAllSessions(claudeSessionDirs())).map((s) => [s.file, s]))
     await this.rebuild()
+  }
+
+  /** Whether a changed file is a top-level Claude Code session log under a configured folder. */
+  isSessionFile(file: string) {
+    return file.endsWith('.jsonl') && claudeSessionDirs().includes(path.dirname(path.dirname(file)))
+  }
+
+  /** Folders to watch for session changes and for skill changes. */
+  watchRoots(): { sessions: string[]; skills: string[] } {
+    const settings = getSettings()
+    const skills = AGENT_IDS.filter((id) => settings.agents[id].enabled).flatMap((id) => [...settings.agents[id].skills, ...settings.agents[id].plugins])
+    return {
+      sessions: claudeSessionDirs(),
+      skills: [...skills, ...settings.extraSkillDirs].map((p) => resolvePath(p)).concat(this.projectSkillRoots()),
+    }
   }
 
   /** Re-parses one transcript; returns the session id if its skill runs changed. */
@@ -30,11 +71,11 @@ class Store {
 
   async rebuild() {
     const cwds = [...this.sessions.values()].map((s) => s.cwd).filter((c): c is string => !!c)
-    const scanned = await scanSkills(cwds)
+    const scanned = await scanSkills(getSettings(), cwds)
     const runs = [...this.sessions.values()].flatMap((s) => s.runs).sort((a, b) => b.startedAt - a.startedAt)
 
     const ids = new Map<string, number>()
-    const skills: SkillEntry[] = scanned.map((s) => ({ ...s, id: uniqueId(ids, s.dirName) }))
+    const skills: SkillEntry[] = scanned.map((s) => ({ ...s, id: uniqueId(ids, s.dirName), key: s.dir }))
 
     // A run that matches no scanned skill came from somewhere we don't scan: bundled with Claude Code, or
     // since uninstalled. Read it from the directory it loaded from, else from the text captured in the
@@ -48,9 +89,12 @@ class Store {
       const name = shortName(run.skill)
       const onDisk = run.baseDir ? await readSkill(run.baseDir, 'builtin') : null
       const captured = parseSkillMarkdown(run.loaded ?? '')
+      // Bundled skills move with every Claude Code version, so they are keyed by name, not folder.
+      const fromRun = { key: `builtin:${name}`, agents: [run.agent] }
       const entry: SkillEntry = onDisk
-        ? { ...onDisk, id: uniqueId(ids, onDisk.dirName) }
+        ? { ...onDisk, ...fromRun, id: uniqueId(ids, onDisk.dirName) }
         : {
+            ...fromRun,
             id: uniqueId(ids, name),
             name,
             dirName: name,
@@ -72,8 +116,25 @@ class Store {
     this.runById = new Map(runs.map((r) => [r.id, r]))
   }
 
-  overview(): Overview {
-    const runs = this.runs
+  /** Whether the skill selection in settings includes this skill. */
+  isTracked(s: SkillEntry) {
+    const { mode, keys } = getSettings().skillFilter
+    return mode === 'all-except' ? !keys.includes(s.key) : keys.includes(s.key)
+  }
+
+  /** Tracked skills, narrowed to one agent's when scoped. */
+  private visibleSkills(scope: AgentScope) {
+    return this.skills.filter((s) => this.isTracked(s) && (!scope || s.agents.includes(scope)))
+  }
+
+  /** Runs of tracked skills, narrowed to one agent's when scoped. */
+  private visibleRuns(scope: AgentScope) {
+    const tracked = new Set(this.skills.filter((s) => this.isTracked(s)).map((s) => s.id))
+    return this.runs.filter((r) => r.skillId !== null && tracked.has(r.skillId) && (!scope || r.agent === scope))
+  }
+
+  overview(scope: AgentScope = null): Overview {
+    const runs = this.visibleRuns(scope)
     const finished = runs.filter((r) => r.status !== 'running')
     const heatmap = Array.from({ length: 7 }, () => Array<number>(24).fill(0))
     const toolMix: Record<ToolKind, number> = { read: 0, write: 0, exec: 0, web: 0, mcp: 0, agent: 0, other: 0 }
@@ -82,7 +143,7 @@ class Store {
       heatmap[(d.getDay() + 6) % 7][d.getHours()]++
       for (const [, , kind] of r.shape) toolMix[kind]++
     }
-    const summaries = this.listSkills()
+    const summaries = this.listSkills(scope)
     return {
       totals: {
         runs: runs.length,
@@ -109,9 +170,10 @@ class Store {
     }
   }
 
-  listSkills(): SkillSummary[] {
-    return this.skills
-      .map((s) => toSummary(s, this.runs.filter((r) => r.skillId === s.id)))
+  listSkills(scope: AgentScope = null): SkillSummary[] {
+    // Within a scope a skill's numbers count only that agent's runs (a shared skill runs under several).
+    return this.visibleSkills(scope)
+      .map((s) => toSummary(s, this.runs.filter((r) => r.skillId === s.id && (!scope || r.agent === scope))))
       .sort((a, b) => (b.stats.lastRunAt ?? 0) - (a.stats.lastRunAt ?? 0) || a.name.localeCompare(b.name))
   }
 
@@ -131,8 +193,26 @@ class Store {
     }
   }
 
-  listRuns(filter: { skill?: string; limit?: number }): RunSummary[] {
-    const runs = filter.skill ? this.runs.filter((r) => r.skillId === filter.skill) : this.runs
+  /** Per agent: whether it is on, and how many tracked skills and runs it has, for the scope switcher. */
+  agentSummary() {
+    const settings = getSettings()
+    return AGENT_IDS.map((id) => ({
+      id,
+      enabled: settings.agents[id].enabled,
+      skills: this.visibleSkills(id).length,
+      runs: this.visibleRuns(id).length,
+      replay: id === 'claude-code',
+    }))
+  }
+
+  /** Skills hidden by the selection in settings, for the "N not tracked" hint. */
+  untrackedCount(scope: AgentScope = null) {
+    return this.skills.filter((s) => !this.isTracked(s) && (!scope || s.agents.includes(scope))).length
+  }
+
+  listRuns(filter: { skill?: string; limit?: number; scope?: AgentScope }): RunSummary[] {
+    // A skill opened directly shows its runs even when it is not tracked.
+    const runs = filter.skill ? this.runs.filter((r) => r.skillId === filter.skill) : this.visibleRuns(filter.scope ?? null)
     return runs.slice(0, filter.limit ?? 500).map(stripRun)
   }
 
@@ -140,9 +220,48 @@ class Store {
     return this.runById.get(id) ?? null
   }
 
-  /** Returns each project's `.claude/skills` directory that holds at least one skill. */
+  /** Returns each project-level skills directory (`.claude/skills`, `.codex/skills`, …) that holds at least one skill. */
   projectSkillRoots(): string[] {
     return [...new Set(this.skills.filter((s) => s.source === 'project').map((s) => path.dirname(s.dir)))]
+  }
+
+  /** Everything the settings page shows: folders in effect and whether they exist, and every skill found. */
+  async settingsPayload(): Promise<SettingsPayload> {
+    const settings = getSettings()
+    const pathStatus = async (paths: string[]): Promise<PathStatus[]> =>
+      Promise.all(paths.map(async (p) => ({ path: p, exists: !!(await fs.stat(resolvePath(p)).catch(() => null))?.isDirectory() })))
+    const status = {} as Record<AgentId, AgentStatus>
+    for (const id of AGENT_IDS) {
+      const a = settings.agents[id]
+      const sessionDirs = a.sessions.map((p) => resolvePath(p))
+      status[id] = {
+        skills: await pathStatus(a.skills),
+        sessions: await pathStatus(a.sessions),
+        plugins: await pathStatus(a.plugins),
+        skillCount: this.skills.filter((s) => s.agents.includes(id) && s.source !== 'builtin').length,
+        sessionFiles:
+          id === 'claude-code' ? (await listSessionFiles(sessionDirs)).length : await countFiles(sessionDirs, /\.jsonl?$/, 20_000),
+        replay: id === 'claude-code',
+      }
+    }
+    return {
+      file: settingsFile(),
+      settings,
+      defaults: detectDefaults(),
+      status,
+      extraStatus: await pathStatus(settings.extraSkillDirs),
+      skills: this.skills
+        .map((s) => ({
+          key: s.key,
+          name: s.name,
+          description: s.description,
+          source: s.source,
+          agents: s.agents,
+          runs: this.runs.filter((r) => r.skillId === s.id).length,
+          tracked: this.isTracked(s),
+        }))
+        .sort((a, b) => b.runs - a.runs || a.name.localeCompare(b.name)),
+    }
   }
 
   async readSkillFile(id: string, rel: string): Promise<string | null> {
@@ -208,9 +327,27 @@ function stats(runs: RunDetail[]): SkillStats {
   }
 }
 
+/** Counts files matching `pattern` under `roots`, giving up at `cap` (it is only shown as a hint). */
+async function countFiles(roots: string[], pattern: RegExp, cap: number): Promise<number> {
+  let n = 0
+  async function walk(dir: string, depth: number) {
+    if (n >= cap || depth > 6) return
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
+    for (const e of entries) {
+      if (n >= cap) return
+      if (e.isDirectory()) await walk(path.join(dir, e.name), depth + 1)
+      else if (e.isFile() && pattern.test(e.name)) n++
+    }
+  }
+  for (const r of roots) await walk(r, 0)
+  return n
+}
+
 function toSummary(s: SkillEntry, runs: RunDetail[]): SkillSummary {
   return {
     id: s.id,
+    key: s.key,
+    agents: s.agents,
     name: s.name,
     description: s.description,
     source: s.source,

@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { PROJECTS_DIR, RUNNING_GRACE_MS } from './config.ts'
+import { RUNNING_GRACE_MS } from './config.ts'
 import type { FileChange, HumanKind, RunDetail, RunStatus, RunTrigger, TokenUsage, ToolKind, TraceEvent } from './types.ts'
 
 export interface ParsedSession {
@@ -287,6 +287,7 @@ export function parseTranscript(
     active = {
       run: {
         id,
+        agent: 'claude-code',
         skill,
         skillId: null,
         args,
@@ -538,20 +539,23 @@ export async function parseSessionFile(file: string, force = false): Promise<Par
   return session
 }
 
-export async function listSessionFiles(): Promise<string[]> {
-  const projects = await fs.readdir(PROJECTS_DIR, { withFileTypes: true }).catch(() => [])
+/** Claude Code session logs: `<projectsDir>/<project>/<session>.jsonl` (subagent logs one level deeper are skipped). */
+export async function listSessionFiles(projectsDirs: string[]): Promise<string[]> {
   const files: string[] = []
-  for (const p of projects) {
-    if (!p.isDirectory()) continue
-    const dir = path.join(PROJECTS_DIR, p.name)
-    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
-    for (const e of entries) if (e.isFile() && e.name.endsWith('.jsonl')) files.push(path.join(dir, e.name))
+  for (const root of new Set(projectsDirs)) {
+    const projects = await fs.readdir(root, { withFileTypes: true }).catch(() => [])
+    for (const p of projects) {
+      if (!p.isDirectory()) continue
+      const dir = path.join(root, p.name)
+      const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
+      for (const e of entries) if (e.isFile() && e.name.endsWith('.jsonl')) files.push(path.join(dir, e.name))
+    }
   }
   return files
 }
 
-export async function loadAllSessions(): Promise<ParsedSession[]> {
-  const files = await listSessionFiles()
+export async function loadAllSessions(projectsDirs: string[]): Promise<ParsedSession[]> {
+  const files = await listSessionFiles(projectsDirs)
   const out: ParsedSession[] = []
   // Bounded concurrency keeps large ~/.claude directories from exhausting file handles.
   for (let i = 0; i < files.length; i += 16) {

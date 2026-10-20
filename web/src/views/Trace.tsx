@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'wouter'
 import type { RunDetail } from '../../../server/types.ts'
+import { AgentTag } from '../components/Scope.tsx'
 import { Empty, PageHeader, Segmented, StatusPill } from '../components/ui.tsx'
 import { useApi, useNow } from '../lib/api.ts'
 import { compact, dateTime, duration, shortId } from '../lib/format.ts'
@@ -94,6 +95,7 @@ export function TraceView({ id }: { id: string }) {
         meta={
           <>
             <StatusPill status={run.status} errors={run.errors} />
+            <AgentTag agent={run.agent} />
             <span>{run.project}</span>
             <span className="text-muted">{run.trigger === 'slash' ? 'via /command' : 'invoked by Claude'}</span>
             {run.model && <span className="font-mono text-[11.5px] text-muted">{run.model}</span>}
