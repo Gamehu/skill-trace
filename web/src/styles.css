@@ -1,0 +1,330 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@import '@fontsource/instrument-serif/400.css';
+@import '@fontsource/instrument-serif/400-italic.css';
+
+/*
+ * "Flight recorder" — an instrument panel for skill runs.
+ * Near-black glass, a dot grid, film grain, one signal color (--signal) for liveness and emphasis.
+ * Tool-kind colors are reserved for data marks; text never wears them.
+ */
+:root {
+  color-scheme: dark;
+  --bg: #08080a;
+  --panel: rgb(255 255 255 / 0.025);
+  --panel-solid: #0f0f12;
+  --raised: rgb(255 255 255 / 0.05);
+  --hover: rgb(255 255 255 / 0.04);
+  --line: rgb(255 255 255 / 0.07);
+  --line-strong: rgb(255 255 255 / 0.14);
+  --fg: #f3f2ee;
+  --fg-2: #b4b2ab;
+  --muted: #76746e;
+  --faint: #4b4a46;
+
+  --signal: #ff6a3d;
+  --signal-soft: rgb(255 106 61 / 0.14);
+  --dot: rgb(255 255 255 / 0.055);
+  --glow-top: rgb(255 106 61 / 0.13);
+  --grain-opacity: 0.05;
+
+  --k-read: #6ea8ff;
+  --k-write: #f5c451;
+  --k-exec: #3dd6a3;
+  --k-web: #b48cff;
+  --k-mcp: #ff7eb6;
+  --k-agent: #5ad1e6;
+  --k-other: #77756f;
+
+  --ok: #3dd6a3;
+  --err: #ff4d5e;
+  --warn: #f5c451;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f4f2ec;
+  --panel: rgb(255 255 255 / 0.6);
+  --panel-solid: #fbfaf6;
+  --raised: rgb(0 0 0 / 0.04);
+  --hover: rgb(0 0 0 / 0.035);
+  --line: rgb(0 0 0 / 0.08);
+  --line-strong: rgb(0 0 0 / 0.16);
+  --fg: #121110;
+  --fg-2: #4a4945;
+  --muted: #85837c;
+  --faint: #b3b1a9;
+
+  --signal: #e8541f;
+  --signal-soft: rgb(232 84 31 / 0.1);
+  --dot: rgb(0 0 0 / 0.07);
+  --glow-top: rgb(232 84 31 / 0.08);
+  --grain-opacity: 0.035;
+
+  --k-read: #2f6fd6;
+  --k-write: #c98500;
+  --k-exec: #0e9e70;
+  --k-web: #7a52d9;
+  --k-mcp: #d6407f;
+  --k-agent: #1595ad;
+  --k-other: #a3a19a;
+
+  --ok: #0e9e70;
+  --err: #d62d3f;
+  --warn: #c98500;
+}
+
+@theme inline {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-serif: 'Instrument Serif', ui-serif, Georgia, serif;
+
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-solid: var(--panel-solid);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-ok: var(--ok);
+  --color-err: var(--err);
+  --color-warn: var(--warn);
+}
+
+html,
+body {
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Atmosphere: signal glow from the top edge over a dot grid. */
+body {
+  background-image:
+    radial-gradient(ellipse 70% 38% at 55% -6%, var(--glow-top), transparent 70%),
+    radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0);
+  background-size:
+    100% 100%,
+    22px 22px;
+  background-attachment: fixed;
+}
+
+/* Film grain over everything; pointer-transparent. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::selection {
+  background: var(--signal-soft);
+  color: var(--fg);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Instrument label: small mono caps. */
+.label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.display {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.02;
+}
+
+/* Glass panel with a hairline top highlight. */
+.glass {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 20px 40px -24px rgb(0 0 0 / 0.6);
+  backdrop-filter: blur(10px);
+}
+:root[data-theme='light'] .glass {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.8),
+    0 18px 36px -26px rgb(0 0 0 / 0.25);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.rise {
+  animation: rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+@keyframes pulse-bar {
+  50% {
+    opacity: 0.5;
+  }
+}
+.bar-live {
+  animation: pulse-bar 1.4s ease-in-out infinite;
+}
+
+@keyframes flash {
+  from {
+    background: var(--signal-soft);
+  }
+}
+.row-new {
+  animation: flash 2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .bar-live,
+  .row-new {
+    animation: none;
+  }
+}
+
+/* Shiki dual themes: colors come from CSS variables so toggling themes needs no re-highlight. */
+.shiki,
+.shiki span {
+  color: var(--shiki-dark);
+  background-color: transparent !important;
+}
+:root[data-theme='light'] .shiki,
+:root[data-theme='light'] .shiki span {
+  color: var(--shiki-light);
+}
+
+/* Rendered SKILL.md */
+.prose-skill {
+  color: var(--fg-2);
+  font-size: 13.5px;
+  line-height: 1.72;
+}
+.prose-skill > * + * {
+  margin-top: 0.85em;
+}
+.prose-skill h1,
+.prose-skill h2,
+.prose-skill h3,
+.prose-skill h4 {
+  color: var(--fg);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.prose-skill h1 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 2.1em;
+  letter-spacing: -0.015em;
+  margin-top: 0.1em;
+}
+.prose-skill h2 {
+  font-size: 1.15em;
+  margin-top: 2em;
+  padding-bottom: 0.45em;
+  border-bottom: 1px solid var(--line);
+}
+.prose-skill h3 {
+  font-size: 1.02em;
+  margin-top: 1.5em;
+}
+.prose-skill a {
+  color: var(--fg);
+  text-decoration: underline;
+  text-decoration-color: var(--signal);
+  text-underline-offset: 3px;
+}
+.prose-skill strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.prose-skill ul,
+.prose-skill ol {
+  padding-left: 1.3em;
+}
+.prose-skill ul {
+  list-style: disc;
+}
+.prose-skill ol {
+  list-style: decimal;
+}
+.prose-skill li + li {
+  margin-top: 0.25em;
+}
+.prose-skill li::marker {
+  color: var(--signal);
+}
+.prose-skill :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--fg);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.1em 0.38em;
+}
+.prose-skill .code-frame {
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  overflow-x: auto;
+}
+.prose-skill blockquote {
+  border-left: 2px solid var(--signal);
+  padding-left: 1em;
+  color: var(--muted);
+}
+.prose-skill table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  display: block;
+  overflow-x: auto;
+}
+.prose-skill th,
+.prose-skill td {
+  border-bottom: 1px solid var(--line);
+  padding: 6px 12px 6px 0;
+  text-align: left;
+  vertical-align: top;
+}
+.prose-skill th {
+  color: var(--fg);
+  font-weight: 500;
+}
+.prose-skill hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+}
