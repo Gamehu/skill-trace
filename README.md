@@ -1,78 +1,226 @@
+<div align="center">
+
+<img src="docs/assets/logo.svg" width="72" alt="" />
+
 # skill-trace
 
-Live visualization of Claude Code skill runs.
+**Replay every skill your coding agent runs: what you asked, what you decided, and what it delivered.**
 
-在本地查看你的 Claude Code Skill，以及每一次 Skill 调用的完整工作过程：调用了哪些工具、各花了多久、哪里出错、消耗多少 token。正在运行的 Skill 会实时出现在页面上。
+A local, read-only dashboard for **Claude Code** skills, which also lists **Codex** and **OpenCode** skills.
 
-## 运行
+[![License: MIT](https://img.shields.io/badge/license-MIT-ff6a3d.svg)](LICENSE)
+![Node 20.19+](https://img.shields.io/badge/node-%E2%89%A520.19-3dd6a3.svg)
+![Runs locally](https://img.shields.io/badge/runs-locally-6ea8ff.svg)
+![No telemetry](https://img.shields.io/badge/telemetry-none-b4b2ab.svg)
+
+**English** · [简体中文](README.zh-CN.md)
+
+<img src="docs/assets/tour.webp" width="100%" alt="A tour: open a run, play it back, inspect the timeline, choose which skills to track" />
+<sub>Open a run, play it back, inspect the timeline, choose which skills to track.</sub>
+
+</div>
+
+## Why
+
+Skills do their work inside long agent conversations. Afterwards it is hard to answer simple questions: *Did the skill finish? What did it actually do? Where did I have to step in? What did it produce?*
+
+skill-trace answers them from the session logs your agent already writes. Each skill run becomes a replay you can read top to bottom, with the moments you took part in highlighted. Nothing is installed into your agent and nothing leaves your machine.
+
+## Features
+
+### Replay a run from input to outcome
+
+Every run reads as three chapters: **what you asked**, **how it went**, and **what it delivered**. Tool calls fold into groups you can open to see each step's full input and output. **Play it back** replays the run step by step.
+
+<img src="docs/assets/replay.webp" alt="Replay of an incident-triage run: the request, the steps, and a sidebar of your decisions" />
+
+### See where you stepped in
+
+The moments that need a person are what make a skill run go right or wrong, so they are never buried:
+
+- **Questions** Claude asked, with every option it offered and the one you picked (or the answer you typed yourself)
+- **Plans** you approved or sent back, with your feedback
+- **Actions you declined** at the permission prompt, and why
+- **Messages you added** while it worked, replies to its questions, and interruptions
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/human-moments.webp" alt="A message added mid-run, a declined rollback, and a question with the chosen option" /></td>
+    <td width="50%"><img src="docs/assets/outcome.webp" alt="The final reply and the file the skill created, shown as a diff" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Your part: steering, declining, choosing</sub></td>
+    <td align="center"><sub>The outcome: final reply and the files it wrote</sub></td>
+  </tr>
+</table>
+
+### Know where the time went
+
+The **Timeline** view lays every step on a time axis, colored by tool kind, including how long Claude waited for you. Hover any bar to see what it was; click to inspect it.
+
+<img src="docs/assets/timeline.webp" alt="Timeline waterfall with the inspector showing a question and the chosen answer" />
+
+### Every skill on your machine, and how it is used
+
+The **Skills** view lists your own, project, plugin and built-in skills with run counts, average duration and a 14-day trend. Open one to read its rendered `SKILL.md`, browse its files and see its run history. **Overview** sums it up: what is running now, when skills run, which are used most.
+
+<table>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: light)" srcset="docs/assets/overview-light.webp" />
+        <img src="docs/assets/overview-dark.webp" alt="skill-trace overview: run counts, what is running now, when skills run, most used skills" />
+      </picture>
+    </td>
+    <td width="50%"><img src="docs/assets/skills.webp" alt="Skill cards with run counts, average time and 14-day trends" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Overview</sub></td>
+    <td align="center"><sub>Skills</sub></td>
+  </tr>
+</table>
+
+### One dashboard for several agents
+
+skill-trace detects the folders of **Claude Code**, **Codex** and **OpenCode**. One switch at the top of Overview, Skills and Runs scopes every page to a single tool, and every skill and run carries a tag saying where it came from. In **Settings**, change any folder that was detected wrong and choose exactly which skills to track, for example only the ones you wrote yourself.
+
+<img src="docs/assets/settings.webp" alt="Settings: detected folders per tool, marked found or not found" />
+
+### Live
+
+Pages update while the agent works. A running skill shows up on Overview the moment it starts, and a skill that stopped to ask you something is marked **Waiting for you**.
+
+## Quick start
+
+Requires **Node.js 20.19 or newer**.
 
 ```bash
+git clone https://github.com/Gamehu/skill-trace.git
+cd skill-trace
 npm install
-npm run build   # 构建前端
-npm start       # http://localhost:4317
+npm run build
+npm start          # http://localhost:4317
 ```
 
-还没有 Skill 运行记录？用演示数据先看效果（会生成一个临时的 `~/.claude`，并有一个会话在实时运行）：
+Then use a skill in Claude Code. The run appears while it happens.
+
+No skill runs yet? Look around with generated data first. It lives in a temporary folder, and one session keeps running live:
 
 ```bash
-npm run build && npm run demo   # http://localhost:4317
+npm run build && npm run demo
 ```
 
-开发模式（前端热更新，API 改动自动重启）：
+## How it works
 
-```bash
-npm run dev     # http://localhost:5173
+```mermaid
+flowchart LR
+  subgraph agents["Your coding agents (unchanged)"]
+    CC["Claude Code"]
+    CX["Codex"]
+    OC["OpenCode"]
+  end
+  subgraph disk["Files they already write"]
+    S["SKILL.md folders"]
+    L["Session logs (JSONL)"]
+  end
+  CC --> S & L
+  CX --> S & L
+  OC --> S & L
+  S -- read --> T["skill-trace server<br/>127.0.0.1"]
+  L -- read + watch --> T
+  T -- "HTTP + live updates (SSE)" --> B["Your browser"]
 ```
 
-可选环境变量：
+1. **Find skills.** Every enabled tool's skill folders are scanned for `SKILL.md`, along with project-level folders (`.claude/skills`, `.codex/skills`, `.opencode/skills`, `.agents/skills`) of the projects you work in. A skill reachable through several paths, for example a symlink shared between tools, is listed once with every tag.
+2. **Find runs.** A run starts when the agent loads a skill (or you type `/skill-name`) and ends at the next skill or at a request unrelated to it. Replies that answer the skill stay in the run: after Claude asks a question, or when the reply is a short answer such as "yes" or "2". So do messages typed while it works and instructions after an interruption.
+3. **Read the outcome.** The final reply is what Claude wrote after its last action. Files come from its `Write` and `Edit` calls.
+4. **Stay live.** Folders are watched with native recursive file watching, and changes reach open pages over Server-Sent Events.
 
-| 变量 | 默认值 | 说明 |
+## Supported tools
+
+| Tool | Skills | Run replay | Default folders |
+|---|:---:|:---:|---|
+| Claude Code | ✅ | ✅ | `~/.claude/skills`, `~/.claude/plugins`, sessions in `~/.claude/projects` |
+| Codex | ✅ | Planned | `~/.codex/skills`, `/etc/codex/skills`, sessions in `~/.codex/sessions` |
+| OpenCode | ✅ | Planned | `~/.config/opencode/skills`, data in `~/.local/share/opencode` |
+
+Each tool's own environment variables are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`), and every folder can be changed in **Settings**.
+
+## Privacy and safety
+
+- **Read-only toward your tools.** It never modifies skills, agent settings or hooks, and adds nothing to the agent's context, so the model's input and output are exactly what they would be without it.
+- **One file written:** its own settings, `~/.config/skill-trace/config.json`, holding only what you changed.
+- **Local only.** The server listens on `127.0.0.1`. It makes no network requests, collects no telemetry and bundles its fonts. Settings can only be saved by the page itself (same-origin JSON requests to localhost).
+- **Your transcripts stay yours.** Pages show full requests and tool output, which can include secrets that appeared in your sessions. Keep the port private.
+
+## Configuration
+
+Most people never need this; **Settings** covers folders and which skills to track.
+
+| Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `4317` | 服务端口，也可用 `npm start -- --port 5000` |
-| `CLAUDE_CONFIG_DIR` / `CODEX_HOME` / `XDG_*` | 各工具默认 | 影响自动识别的目录，也可以直接在 Settings 页改 |
-| `SKILL_TRACE_CONFIG` | `~/.config/skill-trace/config.json` | 设置文件位置 |
+| `PORT` | `4317` | Server port (also `npm start -- --port 5000`) |
+| `SKILL_TRACE_CONFIG` | `~/.config/skill-trace/config.json` | Settings file |
+| `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME` | each tool's default | Where folders are detected |
 
-## 数据从哪来
+## FAQ
 
-不需要埋点，也不修改任何工具的配置，只读取本地已有的文件。支持 **Claude Code、Codex、OpenCode**，目录自动识别，识别不对可以在 **Settings** 页修改：
+<details>
+<summary><b>Does it slow down or change my agent?</b></summary>
 
-| 工具 | Skill 目录（默认） | 会话记录（默认） | 运行回放 |
-|---|---|---|---|
-| Claude Code | `~/.claude/skills`、`~/.claude/plugins`（已安装的插件） | `~/.claude/projects` | ✅ |
-| Codex | `~/.codex/skills`、`/etc/codex/skills` | `~/.codex/sessions` | 暂不支持，只列出 skill |
-| OpenCode | `~/.config/opencode/skills` | `~/.local/share/opencode` | 暂不支持，只列出 skill |
+No. It only reads files the agent has already written, in its own process. The agent does not know it exists.
+</details>
 
-- 会遵循各工具自己的环境变量：`CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`XDG_CONFIG_HOME`、`XDG_DATA_HOME`。
-- 项目级 skill 从你工作过的项目里自动找到：`.claude/skills`（Claude Code）、`.codex/skills`（Codex）、`.opencode/skills`（OpenCode）、`.agents/skills`（Codex 和 OpenCode）。同一个 skill 被几个工具共用（比如软链接）时会显示多个来源标签。
-- **跟踪哪些 skill** 也在 Settings 里选：“跟踪全部，除了我取消勾选的”（新 skill 自动加入）或“只跟踪我勾选的”（新 skill 默认不加入），另有“只看我自己的（user + project）”快捷选项。不跟踪的 skill 及其运行不出现在 Overview、Skills、Runs 里。
-- 设置保存在 `~/.config/skill-trace/config.json`（可用 `SKILL_TRACE_CONFIG` 指定），只记录你改过的部分。这是 skill-trace 唯一会写的文件。
-- **运行过程**（Claude Code）：一次 Skill 运行从 `Skill` 工具调用（或 `/skill-name` 命令）开始，到下一次 Skill 调用、或与这个 Skill 无关的新请求为止。你在过程中的参与都算在这次运行里：回答确认选项（AskUserQuestion）、批准或打回计划（ExitPlanMode）、拒绝某个操作、按 Esc 打断、运行中追加的消息，以及 Claude 提问后你的回复（Claude 刚问了问题，或你的回复是“确认 / 好 / 1”这类短答复时，判定为同一次运行）。
-- **结果**：Skill 最后给出的结论（最后一次操作之后 Claude 写的话），以及它创建或修改的文件和 diff。
-- **实时更新**：用 Node 原生 `fs.watch`（递归模式，macOS 下走 FSEvents）监听上述目录，有变化就通过 SSE 推送到页面。
+<details>
+<summary><b>A skill of mine is missing.</b></summary>
 
-## 页面
+Open **Settings** and check that its folder is listed and marked *Found*, and that the skill is checked under *Skills to track*. The skill needs a `SKILL.md`; frontmatter that strict YAML rejects (such as a description containing `: `) is still read.
+</details>
 
-Overview、Skills、Runs 顶部都有同一个来源切换（All tools / Claude Code / Codex / OpenCode），选择会保留在网址里，切换页面不丢；每个 skill 和每次运行都带来源标签。
+<details>
+<summary><b>Why are there no runs from Codex or OpenCode?</b></summary>
 
-- **Overview**：总览。运行数、工具调用、token 走势，正在运行的 Skill（实时计时），星期 × 小时活跃热力图，最常用 Skill 排行和工具类型占比。
-- **Skills**：本机所有 Skill，按来源筛选。用过的以卡片展示（调用次数、平均耗时、14 天走势），没用过的折叠成紧凑列表。点进去可以看到渲染后的 SKILL.md、附带文件、30 天调用分布和历史运行。
-- **Runs**：所有 Skill 运行，每行带一个按时间排布的工具调用缩略图。
-- **Run**：单次运行，两种视图：
-  - **回放**（默认）：按“输入 → 过程 → 输出”从上往下读。你参与的地方用橙色高亮：确认选项卡片会列出全部选项并标出你选的那个（自己输入的答案单独显示），计划批准 / 打回和你的意见、你的回复和追加消息、被你拒绝的操作。工具调用按段折叠，展开可看每一步的输入输出。最后是 Skill 的最终结论和产出文件的 diff。右侧速览栏可跳到任意一个决定。点“Play it back”可以逐步重放整个过程。
-  - **时间轴**：瀑布图，按工具类型着色，也标出了 Claude 等你回答的时长；点任意一步在右侧查看详情。
-- **Settings**：每个工具读哪些目录（显示找到 / 未找到，可开关、可恢复为自动识别）、额外的 skill 目录、跟踪哪些 skill。
+Their skills are listed today. Replaying their sessions needs support for their log formats, which is on the roadmap.
+</details>
 
-## 技术栈
+<details>
+<summary><b>I updated the code but the page looks the same.</b></summary>
 
-Node + TypeScript · Hono · fs.watch · SSE · Vite · React · Tailwind CSS v4 · Shiki · d3-scale · Geist / Instrument Serif
+`npm start` serves the built page in `dist/`. Run `npm run build`, restart the server, then reload the browser.
+</details>
 
-```
-server/   API、Skill 扫描、会话记录解析、文件监听
-web/      前端（Vite root）
-bin/      CLI 入口
-```
+## Development
 
 ```bash
-npm test          # 解析器单元测试
+npm run dev        # UI with hot reload on :5173, API restarting on change
+npm run demo       # seeded demo data with one live session
+npm test           # parser, run boundaries, settings
 npm run typecheck
 ```
+
+```
+server/            API, skill scanning, transcript parsing, settings, file watching
+web/src/           UI (React, Tailwind CSS); views/ holds one file per page
+scripts/demo.ts    demo data generator
+bin/               CLI entry
+```
+
+Built with TypeScript, [Hono](https://hono.dev), [Vite](https://vite.dev), [React](https://react.dev), [Tailwind CSS](https://tailwindcss.com) and [Shiki](https://shiki.style).
+
+## Roadmap
+
+- [ ] Run replay for Codex and OpenCode
+- [ ] Steps inside subagents
+- [ ] `npx skill-trace` without cloning
+
+## Contributing
+
+Issues and pull requests are welcome. Before opening a pull request, run:
+
+```bash
+npm run typecheck && npm test && npm run build
+```
+
+## License
+
+[MIT](LICENSE) © Gamehu

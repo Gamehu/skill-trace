@@ -1,9 +1,29 @@
 {
   "name": "skill-trace",
   "version": "0.1.0",
-  "description": "Local, live visualization of Claude Code skills and how they run",
-  "type": "module",
+  "description": "Replay every skill your coding agent runs: what you asked, what you decided, what it delivered. Local dashboard for Claude Code, Codex and OpenCode skills.",
+  "keywords": [
+    "claude-code",
+    "claude",
+    "skills",
+    "agent-skills",
+    "codex",
+    "opencode",
+    "observability",
+    "dashboard",
+    "developer-tools"
+  ],
+  "homepage": "https://github.com/Gamehu/skill-trace#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gamehu/skill-trace.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Gamehu/skill-trace/issues"
+  },
+  "author": "Gamehu",
   "license": "MIT",
+  "type": "module",
   "bin": {
     "skill-trace": "bin/skill-trace.js"
   },
