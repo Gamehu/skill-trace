@@ -176,48 +176,6 @@ body::after {
     0 18px 36px -26px rgb(0 0 0 / 0.25);
 }
 
-/* Cursor-following spotlight; --mx/--my are set from pointer events. */
-.spotlight {
-  position: relative;
-  isolation: isolate;
-}
-.spotlight::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
-  background: radial-gradient(240px circle at var(--mx, -999px) var(--my, -999px), var(--signal), transparent 60%);
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0;
-  transition: opacity 0.25s;
-  pointer-events: none;
-}
-.spotlight::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(320px circle at var(--mx, -999px) var(--my, -999px), var(--signal-soft), transparent 55%);
-  opacity: 0;
-  transition: opacity 0.25s;
-  pointer-events: none;
-  z-index: -1;
-}
-.spotlight:hover::before,
-.spotlight:hover::after {
-  opacity: 1;
-}
-
-/* Data marks glow in their own color. */
-.glow {
-  filter: drop-shadow(0 0 6px color-mix(in srgb, currentColor 55%, transparent));
-}
-
 @keyframes rise {
   from {
     opacity: 0;
@@ -247,33 +205,10 @@ body::after {
   animation: flash 2s ease-out;
 }
 
-@keyframes sweep {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(400%);
-  }
-}
-.sweep {
-  animation: sweep 2.8s linear infinite;
-}
-
-@keyframes dash {
-  to {
-    stroke-dashoffset: -40;
-  }
-}
-.scope-line {
-  animation: dash 1.6s linear infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .rise,
   .bar-live,
-  .row-new,
-  .sweep,
-  .scope-line {
+  .row-new {
     animation: none;
   }
 }

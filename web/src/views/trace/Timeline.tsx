@@ -5,21 +5,11 @@ import { SkillMarkdown } from '../../components/Code.tsx'
 import { KindDot, SectionTitle } from '../../components/ui.tsx'
 import { duration } from '../../lib/format.ts'
 import { KINDS, kindColor } from '../../lib/kinds.ts'
+import { axisSpan, axisTicks, tickLabel } from '../../lib/timescale.ts'
 import { isDeclined, shortTool, type ToolRow } from './items.ts'
 import { AskCard, HumanBubble, PlanCard, StepDetail } from './moments.tsx'
 
 export type Row = Exclude<TraceEvent, { type: 'thinking' }>
-
-/** Candidate tick spacings in ms; the first giving at most six ticks wins. */
-const TICK_STEPS = [100, 200, 500, 1e3, 2e3, 5e3, 10e3, 15e3, 30e3, 60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3, 7200e3, 21600e3]
-
-function tickLabel(t: number) {
-  if (t === 0) return '0'
-  if (t % 3600e3 === 0) return `${t / 3600e3}h`
-  if (t % 60e3 === 0) return `${t / 60e3}m`
-  if (t >= 60e3) return `${Math.floor(t / 60e3)}m ${(t % 60e3) / 1e3}s`
-  return `${t / 1e3}s`
-}
 
 const HUMAN_VERB = { reply: 'replied', steer: 'added', interrupt: 'interrupted', reject: 'declined' } as const
 
@@ -77,11 +67,11 @@ interface WaterfallProps {
 }
 
 export function Waterfall({ rows, start, end, now, live, selected, onSelect }: WaterfallProps) {
-  const total = Math.max(1, end - start)
+  // A live run gets a stable axis that extends past "now", so bars do not shift on every tick.
+  const total = axisSpan(end - start, live)
   const x = useMemo(() => scaleLinear().domain([0, total]).range([0, 100]), [total])
-  const step = TICK_STEPS.find((s) => total / s <= 6) ?? TICK_STEPS[TICK_STEPS.length - 1]
   // Drop ticks that would crowd the right edge.
-  const ticks = Array.from({ length: Math.floor(total / step) + 1 }, (_, i) => i * step).filter((t) => x(t) <= 90)
+  const ticks = axisTicks(total).filter((t) => x(t) <= 90)
   const [tip, setTip] = useState<{ x: number; y: number; row: ToolRow } | null>(null)
   const [cursor, setCursor] = useState<number | null>(null)
   const wrap = useRef<HTMLDivElement>(null)
@@ -141,8 +131,8 @@ export function Waterfall({ rows, start, end, now, live, selected, onSelect }: W
             ))}
             {cursor !== null && <span className="absolute inset-y-0 z-10 w-px bg-fg/50" style={{ left: `${cursor * 100}%` }} />}
             {live && (
-              <span className="absolute inset-y-0 right-0 z-10 w-[2px] bg-signal shadow-[0_0_14px_var(--signal)]">
-                <span className="absolute -left-[3px] -top-1 size-2 rounded-full bg-signal" />
+              <span className="absolute inset-y-0 z-10 w-px bg-signal" style={{ left: `${x(end - start)}%` }}>
+                <span className="absolute -left-[3px] -top-1 size-[7px] rounded-full bg-signal" />
               </span>
             )}
           </div>

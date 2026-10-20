@@ -1,19 +1,18 @@
-import { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useContext, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'wouter'
-import { LiveContext } from '../lib/api.ts'
+import { LiveContext, useNow } from '../lib/api.ts'
+import { ago } from '../lib/format.ts'
 
-/** Three trace bars; they oscillate while the live stream is connected. */
-function Logo({ live }: { live: boolean }) {
+/** Three trace bars. */
+function Logo() {
   return (
     <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden>
       {[
         { y: 4, w: 13, x: 1, o: 1 },
         { y: 9.5, w: 15, x: 6, o: 0.6 },
         { y: 15, w: 8, x: 3, o: 0.35 },
-      ].map((b, i) => (
-        <rect key={b.y} x={b.x} y={b.y} width={b.w} height="3" rx="1.5" fill="var(--signal)" opacity={b.o}>
-          {live && <animate attributeName="width" values={`${b.w};${b.w * 0.55};${b.w}`} dur={`${1.6 + i * 0.5}s`} repeatCount="indefinite" />}
-        </rect>
+      ].map((b) => (
+        <rect key={b.y} x={b.x} y={b.y} width={b.w} height="3" rx="1.5" fill="var(--signal)" opacity={b.o} />
       ))}
     </svg>
   )
@@ -42,41 +41,23 @@ function NavLink({ href, label, n }: (typeof NAV)[number]) {
   )
 }
 
-/**
- * A small oscilloscope: idles as a gentle wave and spikes each time the server pushes a change.
- */
-function LiveScope({ version, connected }: { version: number; connected: boolean }) {
-  const [amp, setAmp] = useState(1)
-  const first = useRef(true)
-  useEffect(() => {
-    if (first.current) {
-      first.current = false
-      return
-    }
-    setAmp(6)
-    const t = setTimeout(() => setAmp(1), 900)
-    return () => clearTimeout(t)
-  }, [version])
-
-  const w = 120
-  const path = Array.from({ length: 61 }, (_, i) => {
-    const x = (i / 60) * w
-    const y = 12 + Math.sin(i / 3.2) * (connected ? amp : 0) * Math.sin((i / 60) * Math.PI)
-    return `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-
+/** Connection state in words: whether the page is live and when data last changed. */
+function LiveStatus({ connected, updatedAt }: { connected: boolean; updatedAt: number | null }) {
+  const now = useNow(updatedAt !== null, 5000)
   return (
-    <svg width={w} height="24" className="block" aria-hidden>
-      <path
-        d={path}
-        fill="none"
-        stroke={connected ? 'var(--signal)' : 'var(--faint)'}
-        strokeWidth="1.4"
-        strokeDasharray="3 2"
-        className="scope-line"
-        style={{ transition: 'd 0.5s ease', filter: connected ? 'drop-shadow(0 0 4px var(--signal))' : undefined }}
-      />
-    </svg>
+    <div>
+      <span className="flex items-center gap-2 text-[12.5px] text-fg">
+        <span className={`size-1.5 rounded-full ${connected ? 'bg-ok' : 'bg-faint'}`} />
+        {connected ? 'Live' : 'Offline'}
+      </span>
+      <p className="mt-1 text-[11.5px] leading-snug text-muted">
+        {!connected
+          ? 'Lost the local server; retrying every few seconds.'
+          : updatedAt
+            ? `New activity ${ago(updatedAt, now)}. Pages update on their own.`
+            : 'Pages update on their own when Claude Code writes to ~/.claude.'}
+      </p>
+    </div>
   )
 }
 
@@ -93,19 +74,19 @@ function ThemeToggle() {
     setTheme(next)
   }
   return (
-    <button onClick={toggle} className="label transition-colors hover:text-fg" title="Toggle theme">
-      {theme === 'dark' ? 'Light' : 'Dark'}
+    <button onClick={toggle} className="text-[11.5px] text-muted underline decoration-line-strong underline-offset-4 transition-colors hover:text-fg">
+      Switch to {theme === 'dark' ? 'light' : 'dark'} mode
     </button>
   )
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { connected, version } = useContext(LiveContext)
+  const { connected, updatedAt } = useContext(LiveContext)
   return (
     <div className="flex min-h-dvh max-md:flex-col">
       <aside className="flex shrink-0 flex-col border-line max-md:border-b md:sticky md:top-0 md:h-dvh md:w-60 md:border-r">
         <Link href="/overview" className="flex items-center gap-2.5 px-6 pb-8 pt-7 max-md:pb-3 max-md:pt-4">
-          <Logo live={connected} />
+          <Logo />
           <span className="text-[17px] tracking-tight text-fg">
             skill<span className="display text-[21px] italic text-signal">trace</span>
           </span>
@@ -116,20 +97,9 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="mt-auto px-6 pb-6 max-md:hidden">
-          <div className="glass p-4">
-            <div className="flex items-center justify-between">
-              <span className="label flex items-center gap-2">
-                <span className={`size-1.5 rounded-full ${connected ? 'bg-signal shadow-[0_0_8px_var(--signal)]' : 'bg-faint'}`} />
-                {connected ? 'Live' : 'Offline'}
-              </span>
-              <ThemeToggle />
-            </div>
-            <div className="mt-3">
-              <LiveScope version={version} connected={connected} />
-            </div>
-            <p className="mt-2 text-[11.5px] leading-snug text-muted">
-              {connected ? 'Watching ~/.claude for skill activity.' : 'Reconnecting to the local server…'}
-            </p>
+          <div className="glass space-y-3 p-4">
+            <LiveStatus connected={connected} updatedAt={updatedAt} />
+            <ThemeToggle />
           </div>
         </div>
       </aside>

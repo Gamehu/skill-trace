@@ -18,7 +18,7 @@ function Waiting({ children }: { children: ReactNode }) {
   return (
     <span className="inline-flex items-center gap-2 font-mono text-[11.5px] text-signal">
       <span className="relative flex size-2">
-        <span className="absolute inset-0 animate-ping rounded-full bg-signal" />
+        <span className="absolute inset-0 motion-safe:animate-ping rounded-full bg-signal" />
         <span className="relative size-2 rounded-full bg-signal" />
       </span>
       {children}

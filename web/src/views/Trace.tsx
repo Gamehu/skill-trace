@@ -4,56 +4,14 @@ import type { RunDetail } from '../../../server/types.ts'
 import { Empty, PageHeader, Segmented, StatusPill } from '../components/ui.tsx'
 import { useApi, useNow } from '../lib/api.ts'
 import { compact, dateTime, duration, shortId } from '../lib/format.ts'
-import { kindColor } from '../lib/kinds.ts'
-import { buildItems, humanLabel, isDeclined, isHumanItem, jumpTo, type Item } from './trace/items.ts'
+import { buildItems, isHumanItem, jumpTo } from './trace/items.ts'
 import { Glance, Replay } from './trace/Replay.tsx'
+import { SignalStrip } from './trace/SignalStrip.tsx'
 import { Inspector, Legend, Waterfall, type Row } from './trace/Timeline.tsx'
 
 type Tab = 'replay' | 'timeline'
 
 const initialTab = (): Tab => (location.hash === '#timeline' ? 'timeline' : 'replay')
-
-/**
- * The whole run on one strip: tool calls as colored bars, the person's moments as diamonds above.
- * Diamonds are buttons that jump to that moment.
- */
-function SignalStrip({ run, items, end, playhead, live, onPick }: { run: RunDetail; items: Item[]; end: number; playhead: number | null; live: boolean; onPick: (id: string) => void }) {
-  const total = Math.max(1, end - run.startedAt)
-  const pct = (t: number) => `${Math.min(100, Math.max(0, ((t - run.startedAt) / total) * 100))}%`
-  return (
-    <div className="relative h-11" role="group" aria-label="Run overview">
-      <span className="absolute inset-x-0 top-[29px] h-px bg-line-strong" />
-      {run.events.map((e) => {
-        if (e.type !== 'tool') return null
-        const color = isDeclined(e) ? 'var(--signal)' : e.isError ? 'var(--err)' : kindColor(e.kind)
-        return (
-          <span
-            key={e.id}
-            className="absolute top-[24px] h-[11px] rounded-[3px]"
-            style={{ left: pct(e.start), width: `max(2px, ${(((e.end ?? end) - e.start) / total) * 100}%)`, background: color, boxShadow: `0 0 8px -1px ${color}` }}
-          />
-        )
-      })}
-      {items.filter(isHumanItem).map((it) => (
-        <button
-          key={it.id}
-          onClick={() => onPick(it.id)}
-          title={humanLabel(it)}
-          aria-label={humanLabel(it)}
-          className="group absolute top-0 -translate-x-1/2 p-1"
-          style={{ left: pct(it.at) }}
-        >
-          <span className="block size-2.5 rotate-45 bg-signal shadow-[0_0_10px_var(--signal)] transition-transform group-hover:scale-150" />
-          <span className="absolute left-1/2 top-[14px] h-[10px] w-px -translate-x-1/2 bg-signal/60" />
-        </button>
-      ))}
-      {playhead !== null && (
-        <span className="absolute inset-y-0 w-[2px] bg-fg shadow-[0_0_12px_var(--fg)] transition-[left] duration-500" style={{ left: pct(playhead) }} />
-      )}
-      {live && <span className="bar-live absolute inset-y-1 right-0 w-[2px] bg-signal shadow-[0_0_12px_var(--signal)]" />}
-    </div>
-  )
-}
 
 function Fact({ value, label, tone }: { value: string | number; label: string; tone?: string }) {
   return (
@@ -98,11 +56,12 @@ export function TraceView({ id }: { id: string }) {
   const sel = rows.find((r) => r.id === selected) ?? null
   const playhead = visible !== null && visible > 0 ? (items[Math.min(visible, items.length) - 1]?.at ?? null) : null
 
-  const pick = (itemId: string) => {
-    if (tab === 'replay') {
-      setVisible(null)
-      requestAnimationFrame(() => jumpTo(itemId))
-    } else setSelected(itemId)
+  /** Jump to a step or moment: in Replay scroll to the item holding it, in Timeline select its row. */
+  const pick = (eventId: string) => {
+    if (tab === 'timeline') return setSelected(eventId)
+    const item = items.find((it) => it.id === eventId || (it.kind === 'work' && it.steps.some((s) => s.id === eventId)))
+    setVisible(null)
+    requestAnimationFrame(() => jumpTo(item?.id ?? eventId))
   }
   const togglePlay = () => {
     if (visible !== null) return setVisible(null)
@@ -161,10 +120,10 @@ export function TraceView({ id }: { id: string }) {
             <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
               <Fact value={duration(end - run.startedAt)} label="total" tone={live ? 'text-signal' : undefined} />
               <Fact value={run.toolCalls} label="tool calls" />
-              <Fact value={run.humanTurns} label="by you" tone="text-signal" />
+              <Fact value={run.humanTurns} label="by you" tone={run.humanTurns ? 'text-signal' : undefined} />
               <Fact value={run.filesChanged} label={run.filesChanged === 1 ? 'file' : 'files'} />
               {run.errors > 0 && <Fact value={run.errors} label="failed" tone="text-err" />}
-              <Fact value={compact(run.tokens.output)} label="tokens out" />
+              <Fact value={compact(run.tokens.output)} label="output tokens" />
             </div>
             <button
               onClick={togglePlay}
@@ -187,7 +146,7 @@ export function TraceView({ id }: { id: string }) {
             </button>
           </div>
           <div className="mt-2">
-            <SignalStrip run={run} items={items} end={end} playhead={playhead} live={live} onPick={pick} />
+            <SignalStrip run={run} items={items} now={now} live={live} playhead={playhead} onPick={pick} />
           </div>
         </div>
       </div>

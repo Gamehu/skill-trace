@@ -78,8 +78,6 @@ export function SkillDetailView({ id }: { id: string }) {
   if (error) return <Empty title="Skill not found.">It may have been removed or renamed.</Empty>
   if (!skill) return null
 
-  const daily = skill.daily.map((d) => d.runs)
-
   return (
     <>
       <PageHeader
@@ -102,7 +100,7 @@ export function SkillDetailView({ id }: { id: string }) {
           </p>
         )}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <Metric index={2} label="Runs" value={skill.stats.runs} spark={daily.some(Boolean) ? daily : undefined} />
+          <Metric index={2} label="Runs · all time" value={skill.stats.runs} />
           <Metric index={3} label="Avg time" value={duration(skill.stats.avgDurationMs)} />
           <Metric index={4} label="Runs with errors" value={<span className={skill.stats.errors ? 'text-err' : ''}>{skill.stats.errors}</span>} />
           <Metric index={5} label="Last run" value={ago(skill.stats.lastRunAt)} />
@@ -167,7 +165,7 @@ export function SkillDetailView({ id }: { id: string }) {
 
         <section className="glass rise overflow-hidden pt-6" style={{ ['--i' as string]: 9 }}>
           <div className="px-6">
-            <SectionTitle aside={skill.runs.length > 0 && <span className="tnum font-mono">{skill.runs.length}</span>}>Flight log</SectionTitle>
+            <SectionTitle aside={skill.runs.length > 0 && <span className="tnum font-mono">{skill.runs.length}</span>}>Runs of this skill</SectionTitle>
           </div>
           {skill.runs.length ? <RunTable runs={skill.runs} showSkill={false} /> : <p className="px-6 pb-6 text-muted">Not used yet.</p>}
         </section>

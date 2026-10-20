@@ -4,7 +4,6 @@ import type { SkillSource, SkillSummary } from '../../../server/types.ts'
 import { Empty, PageHeader, SearchInput, Segmented, SourceTag, Sparkline } from '../components/ui.tsx'
 import { useApi, useNow } from '../lib/api.ts'
 import { ago, duration } from '../lib/format.ts'
-import { trackSpotlight } from '../lib/motion.ts'
 
 type Filter = 'all' | SkillSource
 
@@ -21,8 +20,7 @@ function SkillCard({ skill, index, now }: { skill: SkillSummary; index: number; 
   return (
     <Link
       href={`/skills/${skill.id}`}
-      onPointerMove={trackSpotlight}
-      className="glass spotlight rise flex min-w-0 flex-col p-5 transition-transform duration-300 hover:-translate-y-0.5"
+      className="glass rise flex min-w-0 flex-col p-5 transition-colors hover:border-line-strong hover:bg-hover"
       style={{ ['--i' as string]: Math.min(index, 12) }}
     >
       <div className="flex items-start justify-between gap-3">
@@ -41,7 +39,7 @@ function SkillCard({ skill, index, now }: { skill: SkillSummary; index: number; 
       <p className="mt-4 line-clamp-2 min-h-[2.9em] text-[12.5px] leading-[1.45] text-muted">{skill.description || 'No description.'}</p>
       <div className="mt-4 flex items-end justify-between gap-4 border-t border-line pt-4">
         <span className="space-y-0.5">
-          <span className="label block text-[9.5px]">Avg</span>
+          <span className="label block text-[9.5px]">Avg time</span>
           <span className="tnum block font-mono text-[13px] text-fg-2">{duration(stats.avgDurationMs)}</span>
         </span>
         {stats.errors > 0 && (
@@ -50,7 +48,10 @@ function SkillCard({ skill, index, now }: { skill: SkillSummary; index: number; 
             <span className="tnum block font-mono text-[13px] text-err">{stats.errors}</span>
           </span>
         )}
-        <Sparkline values={skill.spark} width={110} height={28} />
+        <span className="flex flex-col items-end gap-1" title="Runs per day over the last 14 days">
+          <Sparkline values={skill.spark} width={110} height={28} />
+          <span className="label text-[9px]">Runs · 14 days</span>
+        </span>
       </div>
     </Link>
   )
@@ -97,7 +98,7 @@ export function SkillsView() {
   return (
     <>
       <PageHeader
-        eyebrow="Catalog"
+        eyebrow="All skills on this machine"
         title={
           <>
             Skills<span className="italic text-signal">.</span>
@@ -127,7 +128,7 @@ export function SkillsView() {
 
       {active.length > 0 && (
         <section className="px-6 sm:px-10">
-          <h2 className="label mb-4">In rotation · {active.length}</h2>
+          <h2 className="label mb-4">Used · {active.length}</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {active.map((s, i) => (
               <SkillCard key={s.id} skill={s} index={i} now={now} />

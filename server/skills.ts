@@ -52,15 +52,39 @@ async function findSkillDirs(root: string, maxDepth: number): Promise<string[]> 
   return out.sort()
 }
 
+/**
+ * Line-based reading of `key: value` frontmatter, for files strict YAML rejects. Skill descriptions
+ * often contain ": " ("Use when: …"), which YAML reads as a nested mapping but Claude Code accepts.
+ * Indented lines continue the previous value; `>` and `|` block markers are honored loosely.
+ */
+export function parseLooseFrontmatter(src: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  let key: string | null = null
+  let block: '>' | '|' | null = null
+  for (const line of src.split(/\r?\n/)) {
+    const m = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/)
+    if (m) {
+      key = m[1]
+      const v = m[2].trim()
+      block = v === '>' || v === '>-' ? '>' : v === '|' || v === '|-' ? '|' : null
+      out[key] = block ? '' : v.replace(/^(['"])([\s\S]*)\1$/, '$2')
+    } else if (key && /^\s+\S/.test(line)) {
+      const prev = String(out[key] ?? '')
+      out[key] = prev ? `${prev}${block === '|' ? '\n' : ' '}${line.trim()}` : line.trim()
+    }
+  }
+  return out
+}
+
 export function parseSkillMarkdown(raw: string): { frontmatter: Record<string, unknown>; body: string } {
   const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/)
   if (!m) return { frontmatter: {}, body: raw }
-  let frontmatter: Record<string, unknown> = {}
+  let frontmatter: Record<string, unknown>
   try {
     const parsed = YAML.parse(m[1])
-    if (parsed && typeof parsed === 'object') frontmatter = parsed as Record<string, unknown>
+    frontmatter = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : parseLooseFrontmatter(m[1])
   } catch {
-    // Malformed frontmatter: show the body anyway.
+    frontmatter = parseLooseFrontmatter(m[1])
   }
   return { frontmatter, body: raw.slice(m[0].length) }
 }

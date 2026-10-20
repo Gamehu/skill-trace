@@ -42,7 +42,7 @@ export function StatusDot({ status, errors = 0 }: StatusProps) {
   const color = active ? 'bg-signal' : failed ? 'bg-err' : status === 'interrupted' ? 'bg-warn' : 'bg-faint'
   return (
     <span className="relative inline-flex size-2 shrink-0" title={label} aria-label={label}>
-      {active && <span className={`absolute inset-0 rounded-full bg-signal ${status === 'waiting' ? 'animate-pulse' : 'animate-ping'}`} />}
+      {active && <span className={`absolute inset-0 rounded-full bg-signal ${status === 'waiting' ? 'motion-safe:animate-pulse' : 'motion-safe:animate-ping'}`} />}
       <span
         className={`relative size-2 ${status === 'waiting' ? 'rotate-45 rounded-[2px]' : 'rounded-full'} ${color}`}
         style={active ? { boxShadow: '0 0 10px var(--signal)' } : undefined}
@@ -86,7 +86,7 @@ export function KindDot({ kind, className = '' }: { kind: ToolKind; className?: 
   return (
     <span
       className={`inline-block size-2 shrink-0 rounded-[2px] ${className}`}
-      style={{ background: kindColor(kind), boxShadow: `0 0 8px ${kindColor(kind)}` }}
+      style={{ background: kindColor(kind) }}
     />
   )
 }
@@ -117,7 +117,7 @@ export function Sparkline({ values, width = 120, height = 32, color = 'var(--sig
         </linearGradient>
       </defs>
       <path d={`${line} L${width},${height} L0,${height} Z`} fill={`url(#${gradId})`} />
-      <path d={line} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" style={{ filter: `drop-shadow(0 0 4px ${color})` }} />
+      <path d={line} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
       <circle cx={lx} cy={ly} r="2.5" fill={color} />
     </svg>
   )

@@ -5,9 +5,11 @@ export interface LiveState {
   /** Bumped whenever the server reports a transcript or skill change; data hooks refetch on change. */
   version: number
   connected: boolean
+  /** When the server last reported a change (ms), or null if nothing changed since the page opened. */
+  updatedAt: number | null
 }
 
-export const LiveContext = createContext<LiveState>({ version: 0, connected: false })
+export const LiveContext = createContext<LiveState>({ version: 0, connected: false, updatedAt: null })
 
 /**
  * Subscribes to the server's change stream, reconnecting after drops.
@@ -15,7 +17,7 @@ export const LiveContext = createContext<LiveState>({ version: 0, connected: fal
  * @returns The live connection state to provide through {@link LiveContext}.
  */
 export function useLiveConnection(): LiveState {
-  const [state, setState] = useState<LiveState>({ version: 0, connected: false })
+  const [state, setState] = useState<LiveState>({ version: 0, connected: false, updatedAt: null })
   useEffect(() => {
     let es: EventSource | null = null
     let retry: ReturnType<typeof setTimeout>
@@ -24,7 +26,7 @@ export function useLiveConnection(): LiveState {
       es.onopen = () => setState((s) => ({ ...s, connected: true }))
       es.onmessage = (msg) => {
         const e = JSON.parse(msg.data) as ServerEvent
-        if (e.type === 'update') setState((s) => ({ ...s, version: s.version + 1 }))
+        if (e.type === 'update') setState((s) => ({ ...s, version: s.version + 1, updatedAt: Date.now() }))
       }
       es.onerror = () => {
         es?.close()
