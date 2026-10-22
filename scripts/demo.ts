@@ -521,7 +521,7 @@ function writeSkills() {
   fs.writeFileSync(path.join(HOME, 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins }, null, 2))
 }
 
-/** A few Codex and OpenCode skills (listed only: their sessions are not replayed yet), one shared by symlink. */
+/** A few Codex and OpenCode skills, one shared by symlink. */
 function writeOtherAgents() {
   const skill = (dir: string, name: string, description: string, body: string) => {
     fs.mkdirSync(path.join(dir, name), { recursive: true })

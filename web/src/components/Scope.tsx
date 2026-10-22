@@ -34,8 +34,7 @@ export function ScopeTabs({ count }: { count: 'skills' | 'runs' }) {
   const total = agents.reduce((n, a) => n + a[count], 0)
   const tabs = [{ id: null, label: 'All tools', n: total, note: '' }, ...AGENTS.map((a) => {
     const info = agents.find((x) => x.id === a.id)
-    const note = !info?.enabled ? 'off' : count === 'runs' && !info.replay ? 'skills only' : ''
-    return { id: a.id, label: a.label, n: info?.[count] ?? 0, note }
+    return { id: a.id, label: a.label, n: info?.[count] ?? 0, note: info?.enabled ? '' : 'off' }
   })]
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -59,22 +58,6 @@ export function ScopeTabs({ count }: { count: 'skills' | 'runs' }) {
       <Link href="/settings" className="text-[12px] text-muted underline decoration-line-strong underline-offset-4 hover:text-fg">
         Wrong folders? Change sources
       </Link>
-    </div>
-  )
-}
-
-/** Shown on Runs and Overview when the selected agent's sessions cannot be replayed yet. */
-export function ReplayNotYet({ agent }: { agent: AgentId }) {
-  return (
-    <div className="glass mx-auto max-w-xl p-6 text-center">
-      <p className="display text-[26px] text-fg-2">Runs from {agentLabel(agent)} aren’t shown yet.</p>
-      <p className="mt-2 text-muted">
-        Its skills are listed under{' '}
-        <Link href={`/skills?agent=${agent}`} className="text-fg underline decoration-line-strong underline-offset-4">
-          Skills
-        </Link>
-        . Replaying its sessions needs support for its log format, which is still to come.
-      </p>
     </div>
   )
 }

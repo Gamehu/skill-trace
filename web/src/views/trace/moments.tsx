@@ -43,11 +43,11 @@ function MomentCard({ title, aside, children }: { title: ReactNode; aside?: Reac
   )
 }
 
-export function AskCard({ ev, live }: { ev: AskRow; live: boolean }) {
+export function AskCard({ ev, live, agentName }: { ev: AskRow; live: boolean; agentName: string }) {
   const waited = ev.answeredAt !== null ? duration(ev.answeredAt - ev.at) : null
   return (
     <MomentCard
-      title="Claude asked you"
+      title={`${agentName} asked you`}
       aside={
         ev.answeredAt === null ? (
           live ? <Waiting>Waiting for your answer</Waiting> : <span className="label">Never answered</span>
@@ -174,13 +174,13 @@ export function HumanBubble({ ev }: { ev: HumanRow }) {
   )
 }
 
-/** Claude narrating; when it is the question you then answered, it gets a quiet frame. */
-export function Say({ text, asks }: { text: string; asks: boolean }) {
+/** Agent narration; a question the person answered gets a quiet frame. */
+export function Say({ text, asks, agentName }: { text: string; asks: boolean; agentName: string }) {
   return (
     <div className={asks ? 'rounded-2xl border border-line-strong bg-panel px-4 py-3' : ''}>
       <div className="label mb-1 flex items-center gap-2 text-[9.5px]">
         <span className="size-1.5 rounded-full bg-fg-2" />
-        {asks ? 'Claude asked' : 'Claude'}
+        {asks ? `${agentName} asked` : agentName}
       </div>
       <div className={asks ? 'text-[14.5px] [&_.prose-skill]:text-fg' : '[&_.prose-skill]:text-[13px]'}>
         <SkillMarkdown source={text} />

@@ -132,6 +132,26 @@ async function installedPluginPaths(pluginsDir: string): Promise<string[]> {
   }
 }
 
+/**
+ * Lists the version folder Codex uses for each plugin in its cache (`marketplace/plugin/version`). The cache
+ * keeps superseded versions next to the current one; the most recently written is the one installed.
+ */
+async function codexPluginPaths(cacheDir: string): Promise<string[]> {
+  const subdirs = async (dir: string) =>
+    (await fs.readdir(dir, { withFileTypes: true }).catch(() => []))
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+      .map((e) => path.join(dir, e.name))
+  const out: string[] = []
+  for (const marketplace of await subdirs(cacheDir)) {
+    for (const plugin of await subdirs(marketplace)) {
+      const versions = await Promise.all((await subdirs(plugin)).map(async (dir) => ({ dir, mtimeMs: (await fs.stat(dir).catch(() => null))?.mtimeMs ?? 0 })))
+      const current = versions.sort((x, y) => y.mtimeMs - x.mtimeMs)[0]
+      if (current) out.push(current.dir)
+    }
+  }
+  return out
+}
+
 /** Project-level skill folders inside a working directory, and the agents that read each. */
 export const PROJECT_SKILL_DIRS: [string, AgentId[]][] = [
   [path.join('.claude', 'skills'), ['claude-code']],
@@ -163,7 +183,8 @@ export async function scanSkills(settings: Settings, projectDirs: string[]): Pro
     const a = settings.agents[id]
     for (const root of a.skills) found.push(...(await fromRoot(resolvePath(root), [id])))
     for (const pluginsDir of a.plugins) {
-      for (const root of await installedPluginPaths(resolvePath(pluginsDir))) {
+      const roots = id === 'codex' ? await codexPluginPaths(resolvePath(pluginsDir)) : await installedPluginPaths(resolvePath(pluginsDir))
+      for (const root of roots) {
         for (const dir of await findSkillDirs(root, 4)) found.push({ dir, source: 'plugin', agents: [id] })
       }
     }

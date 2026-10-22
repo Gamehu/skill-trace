@@ -14,6 +14,7 @@ export function detectDefaults(env: NodeJS.ProcessEnv = process.env, home = os.h
   const codex = env.CODEX_HOME ?? path.join(home, '.codex')
   const xdgConfig = env.XDG_CONFIG_HOME ?? path.join(home, '.config')
   const xdgData = env.XDG_DATA_HOME ?? path.join(home, '.local', 'share')
+  const sharedSkills = path.join(home, '.agents', 'skills')
   return {
     agents: {
       'claude-code': {
@@ -24,13 +25,13 @@ export function detectDefaults(env: NodeJS.ProcessEnv = process.env, home = os.h
       },
       codex: {
         enabled: true,
-        skills: [path.join(codex, 'skills'), ...(process.platform === 'win32' ? [] : ['/etc/codex/skills'])],
+        skills: [path.join(codex, 'skills'), sharedSkills, ...(process.platform === 'win32' ? [] : ['/etc/codex/skills'])],
         sessions: [path.join(codex, 'sessions')],
-        plugins: [],
+        plugins: [path.join(codex, 'plugins', 'cache')],
       },
       opencode: {
         enabled: true,
-        skills: [path.join(xdgConfig, 'opencode', 'skills')],
+        skills: [path.join(xdgConfig, 'opencode', 'skills'), sharedSkills],
         sessions: [path.join(xdgData, 'opencode')],
         plugins: [],
       },

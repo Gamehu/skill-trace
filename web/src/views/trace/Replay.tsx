@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import type { RunDetail } from '../../../../server/types.ts'
 import { SkillMarkdown } from '../../components/Code.tsx'
+import { agentLabel } from '../../lib/agents.ts'
 import { duration } from '../../lib/format.ts'
 import { FileChanges } from './Diff.tsx'
 import { humanLabel, isHumanItem, jumpTo, type Item } from './items.ts'
@@ -68,6 +69,7 @@ const STATUS_LINE: Record<RunDetail['status'], (d: string) => ReactNode> = {
 export function Replay({ run, items, now, live, visible }: ReplayProps) {
   const shown = visible === null ? items : items.slice(0, visible)
   const playing = visible !== null
+  const agentName = agentLabel(run.agent)
   const off = (t: number) => `+${duration(t - run.startedAt)}`
   const end = live ? Math.max(now, run.endedAt) : run.endedAt
   const showOutput = !playing || visible >= items.length
@@ -111,7 +113,7 @@ export function Replay({ run, items, now, live, visible }: ReplayProps) {
               <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 hover:text-fg">
                 <span className="inline-block text-faint transition-transform group-open:rotate-90">›</span>
                 <span className="text-fg-2">
-                  Claude loaded <span className="font-mono text-fg">{run.skill.split(':').pop()}</span>
+                  {agentName} loaded <span className="font-mono text-fg">{run.skill.split(':').pop()}</span>
                   {run.trigger === 'model' && <span className="text-muted"> on its own</span>}
                 </span>
                 {run.loaded && <span className="label ml-auto text-[9.5px]">View instructions</span>}
@@ -147,8 +149,8 @@ export function Replay({ run, items, now, live, visible }: ReplayProps) {
           {shown.map((it) => (
             <Entry key={it.id} id={it.id} offset={off(it.at)} human={isHumanItem(it)}>
               {it.kind === 'work' && <WorkGroup steps={it.steps} now={now} live={live} defaultOpen={it.steps.length <= 2 || it.steps.some((s) => s.isError)} />}
-              {it.kind === 'say' && <Say text={it.text} asks={it.asks} />}
-              {it.kind === 'ask' && <AskCard ev={it.ev} live={live || run.status === 'waiting'} />}
+              {it.kind === 'say' && <Say text={it.text} asks={it.asks} agentName={agentName} />}
+              {it.kind === 'ask' && <AskCard ev={it.ev} live={live || run.status === 'waiting'} agentName={agentName} />}
               {it.kind === 'plan' && <PlanCard ev={it.ev} live={live || run.status === 'waiting'} />}
               {it.kind === 'human' && <HumanBubble ev={it.ev} />}
             </Entry>
@@ -171,7 +173,7 @@ export function Replay({ run, items, now, live, visible }: ReplayProps) {
                 <span className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full bg-signal opacity-[0.07] blur-3xl" />
                 <div className="label mb-4 flex items-center gap-2">
                   <span className="size-1.5 rounded-full bg-signal shadow-[0_0_8px_var(--signal)]" />
-                  {run.status === 'waiting' ? 'Claude’s question' : 'Final reply'}
+                  {run.status === 'waiting' ? `${agentName}’s question` : 'Final reply'}
                 </div>
                 {run.outcome.text ? (
                   <div className="[&_.prose-skill]:text-[14.5px] [&_.prose-skill]:text-fg">
@@ -187,8 +189,10 @@ export function Replay({ run, items, now, live, visible }: ReplayProps) {
                 <div className="label mb-2 flex items-center justify-between">
                   <span>Files it produced</span>
                   <span className="tnum font-mono normal-case tracking-normal">
-                    <span className="text-ok">+{run.outcome.files.reduce((n, f) => n + f.additions, 0)}</span>{' '}
-                    <span className="text-err">−{run.outcome.files.reduce((n, f) => n + f.deletions, 0)}</span>
+                    {run.outcome.files.every((f) => f.edits.length > 0) ? (
+                      <><span className="text-ok">+{run.outcome.files.reduce((n, f) => n + f.additions, 0)}</span>{' '}
+                        <span className="text-err">−{run.outcome.files.reduce((n, f) => n + f.deletions, 0)}</span></>
+                    ) : `${run.outcome.files.length} files`}
                   </span>
                 </div>
                 <FileChanges files={run.outcome.files} />

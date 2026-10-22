@@ -8,7 +8,7 @@ const args = process.argv.slice(2)
 if (args.includes('-h') || args.includes('--help')) {
   console.log(`Usage: skill-trace [--port <n>]
 
-Reads Claude Code transcripts and skills from ~/.claude (override with CLAUDE_CONFIG_DIR)
+Reads Claude Code, Codex and OpenCode skills and session history from their configured folders
 and serves a live dashboard on http://localhost:4317.`)
   process.exit(0)
 }

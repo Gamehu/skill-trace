@@ -7,8 +7,8 @@ import { useApi, useNow } from '../lib/api.ts'
 import { compact, duration } from '../lib/format.ts'
 import { KINDS, kindColor } from '../lib/kinds.ts'
 import { RunTable } from './Runs.tsx'
-import { ReplayNotYet, ScopeTabs } from '../components/Scope.tsx'
-import { agentLabel, scoped, useScope, withScope, type AgentInfo } from '../lib/agents.ts'
+import { ScopeTabs } from '../components/Scope.tsx'
+import { agentLabel, scoped, useScope, withScope } from '../lib/agents.ts'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -48,7 +48,7 @@ function LiveMonitor({ running }: { running: RunSummary[] }) {
       {running.length === 0 ? (
         <div className="py-2">
           <p className="display text-[26px] italic text-fg-2">Idle.</p>
-          <p className="text-muted">When Claude Code starts a skill, it shows up here with a live timer, and a click opens its replay.</p>
+          <p className="text-muted">When a skill starts, it shows up here with a live timer, and a click opens its replay.</p>
         </div>
       ) : (
         <ul className="space-y-4">
@@ -199,63 +199,55 @@ function TopSkills({ skills, scope }: { skills: Overview['topSkills']; scope: Ag
 export function OverviewView() {
   const [scope] = useScope()
   const { data, error } = useApi<Overview>(scoped('/api/overview', scope))
-  const { data: agents } = useApi<AgentInfo[]>('/api/agents')
   if (error) return <Empty title="Could not reach the recorder.">{error}</Empty>
   if (!data) return null
   const { totals, daily } = data
   const errorRate = totals.runs ? Math.round((totals.runsWithErrors / totals.runs) * 100) : 0
-  const noReplay = scope && agents?.find((a) => a.id === scope)?.replay === false
 
   return (
     <>
       <Hero totals={totals} running={data.running.length} scope={scope} />
-      {noReplay ? (
-        <div className="px-6 sm:px-10">
-          <ReplayNotYet agent={scope} />
+      <div className="space-y-4 px-6 sm:px-10">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric index={0} label="Runs · last 30 days" value={daily.reduce((n, d) => n + d.runs, 0)} hint="Line: runs per day" spark={daily.map((d) => d.runs)} />
+          <Metric
+            index={1}
+            label="Tool calls · last 30 days"
+            value={compact(daily.reduce((n, d) => n + d.toolCalls, 0))}
+            hint={`${(totals.toolCalls / Math.max(1, totals.runs)).toFixed(1)} per run on average`}
+            spark={daily.map((d) => d.toolCalls)}
+          />
+          <Metric
+            index={2}
+            label="Output tokens · last 30 days"
+            value={compact(daily.reduce((n, d) => n + d.outputTokens, 0))}
+            hint={`${compact(totals.outputTokens)} all time`}
+            spark={daily.map((d) => d.outputTokens)}
+          />
+          <Metric
+            index={3}
+            label="Average run · all time"
+            value={duration(totals.avgDurationMs)}
+            hint={<span className={errorRate ? 'text-err' : ''}>{errorRate}% of runs had a failed step</span>}
+          />
         </div>
-      ) : (
-        <div className="space-y-4 px-6 sm:px-10">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric index={0} label="Runs · last 30 days" value={daily.reduce((n, d) => n + d.runs, 0)} hint="Line: runs per day" spark={daily.map((d) => d.runs)} />
-            <Metric
-              index={1}
-              label="Tool calls · last 30 days"
-              value={compact(daily.reduce((n, d) => n + d.toolCalls, 0))}
-              hint={`${(totals.toolCalls / Math.max(1, totals.runs)).toFixed(1)} per run on average`}
-              spark={daily.map((d) => d.toolCalls)}
-            />
-            <Metric
-              index={2}
-              label="Output tokens · last 30 days"
-              value={compact(daily.reduce((n, d) => n + d.outputTokens, 0))}
-              hint={`${compact(totals.outputTokens)} all time`}
-              spark={daily.map((d) => d.outputTokens)}
-            />
-            <Metric
-              index={3}
-              label="Average run · all time"
-              value={duration(totals.avgDurationMs)}
-              hint={<span className={errorRate ? 'text-err' : ''}>{errorRate}% of runs had a failed step</span>}
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <LiveMonitor running={data.running} />
-            <ToolMix mix={data.toolMix} />
-          </div>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <Heatmap grid={data.heatmap} />
-            <TopSkills skills={data.topSkills} scope={scope} />
-          </div>
-          {data.recent.length > 0 && (
-            <section className="glass rise overflow-hidden pt-6" style={{ ['--i' as string]: 8 }}>
-              <div className="px-6">
-                <SectionTitle aside={<Link href={withScope('/runs', scope)} className="hover:text-fg">All runs →</Link>}>Latest runs</SectionTitle>
-              </div>
-              <RunTable runs={data.recent} />
-            </section>
-          )}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <LiveMonitor running={data.running} />
+          <ToolMix mix={data.toolMix} />
         </div>
-      )}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <Heatmap grid={data.heatmap} />
+          <TopSkills skills={data.topSkills} scope={scope} />
+        </div>
+        {data.recent.length > 0 && (
+          <section className="glass rise overflow-hidden pt-6" style={{ ['--i' as string]: 8 }}>
+            <div className="px-6">
+              <SectionTitle aside={<Link href={withScope('/runs', scope)} className="hover:text-fg">All runs →</Link>}>Latest runs</SectionTitle>
+            </div>
+            <RunTable runs={data.recent} />
+          </section>
+        )}
+      </div>
     </>
   )
 }

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { AGENT_IDS, detectDefaults, getSettings, resolvePath, settingsFile } from './settings.ts'
 import { listSkillFiles, parseSkillMarkdown, readSkill, scanSkills, type SkillEntry } from './skills.ts'
+import { loadCodexSessions, loadOpenCodeDb, loadOpenCodeSessions, OPENCODE_DB, parseCodexFile } from './agent-sessions.ts'
 import { listSessionFiles, loadAllSessions, parseSessionFile, type ParsedSession } from './transcripts.ts'
 import type {
   AgentId,
@@ -19,10 +20,16 @@ import type {
   ToolKind,
 } from './types.ts'
 
-/** Claude Code session folders in effect (none when Claude Code is turned off). */
-function claudeSessionDirs() {
-  const a = getSettings().agents['claude-code']
+/** An agent's session folders in effect (none when the agent is turned off). */
+function sessionDirs(id: AgentId) {
+  const a = getSettings().agents[id]
   return a.enabled ? a.sessions.map((p) => resolvePath(p)) : []
+}
+
+/** A session log, named by the file the store keys it under, and the agent that wrote it. */
+export interface SessionSource {
+  agent: AgentId
+  file: string
 }
 
 /** In-memory index over parsed transcripts and the skill catalog. Rebuilt incrementally on file changes. */
@@ -31,20 +38,52 @@ class Store {
   private skills: SkillEntry[] = []
   private runs: RunDetail[] = []
   private runById = new Map<string, RunDetail>()
+  private queue: Promise<unknown> = Promise.resolve()
 
   async init() {
     await this.reload()
   }
 
-  /** Re-reads every session and skill, e.g. after the folders in settings changed. */
-  async reload() {
-    this.sessions = new Map((await loadAllSessions(claudeSessionDirs())).map((s) => [s.file, s]))
-    await this.rebuild()
+  /** Runs index updates one at a time, so a slow reload cannot finish after a newer update and overwrite it. */
+  private serial<T>(task: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(task)
+    this.queue = next.catch(() => {})
+    return next
   }
 
-  /** Whether a changed file is a top-level Claude Code session log under a configured folder. */
-  isSessionFile(file: string) {
-    return file.endsWith('.jsonl') && claudeSessionDirs().includes(path.dirname(path.dirname(file)))
+  /** Re-reads every session and skill, e.g. after the folders in settings changed. */
+  reload(): Promise<void> {
+    return this.serial(async () => {
+      const loaded = await Promise.all([
+        loadAllSessions(sessionDirs('claude-code')),
+        loadCodexSessions(sessionDirs('codex')),
+        loadOpenCodeSessions(sessionDirs('opencode')),
+      ])
+      this.sessions = new Map(loaded.flat().map((s) => [s.file, s]))
+      await this.reindex()
+    })
+  }
+
+  /**
+   * The session log a changed file belongs to: a top-level Claude Code log, a Codex rollout, or an
+   * OpenCode database under a folder in effect.
+   *
+   * @param file - Absolute path of the changed file.
+   * @returns The log to re-read, or null when the file is none of these.
+   */
+  sessionSource(file: string): SessionSource | null {
+    if (file.endsWith('.jsonl')) {
+      if (sessionDirs('claude-code').includes(path.dirname(path.dirname(file)))) return { agent: 'claude-code', file }
+      if (sessionDirs('codex').some((dir) => file.startsWith(dir + path.sep))) return { agent: 'codex', file }
+      return null
+    }
+    // OpenCode writes through SQLite's write-ahead log, so a change to either file is a change to the database.
+    const name = path.basename(file)
+    const dir = path.dirname(file)
+    if ((name === OPENCODE_DB || name === `${OPENCODE_DB}-wal`) && sessionDirs('opencode').includes(dir)) {
+      return { agent: 'opencode', file: path.join(dir, OPENCODE_DB) }
+    }
+    return null
   }
 
   /** Folders to watch for session changes and for skill changes. */
@@ -52,24 +91,42 @@ class Store {
     const settings = getSettings()
     const skills = AGENT_IDS.filter((id) => settings.agents[id].enabled).flatMap((id) => [...settings.agents[id].skills, ...settings.agents[id].plugins])
     return {
-      sessions: claudeSessionDirs(),
+      sessions: AGENT_IDS.flatMap(sessionDirs),
       skills: [...skills, ...settings.extraSkillDirs].map((p) => resolvePath(p)).concat(this.projectSkillRoots()),
     }
   }
 
-  /** Re-parses one transcript; returns the session id if its skill runs changed. */
-  async refreshSession(file: string): Promise<string | null> {
-    const before = this.sessions.get(file)
-    const s = await parseSessionFile(file)
-    if (s) this.sessions.set(file, s)
-    else this.sessions.delete(file)
-    const changed = JSON.stringify(before?.runs.map(fingerprint)) !== JSON.stringify(s?.runs.map(fingerprint))
-    const newProject = s?.cwd && !before?.cwd
-    if (changed || newProject) await this.rebuild()
-    return changed ? (s?.id ?? before?.id ?? null) : null
+  /**
+   * Re-reads one session log. An OpenCode database holds many sessions; all of them are replaced.
+   *
+   * @param source - The log, from {@link Store.sessionSource}.
+   * @returns The ids of sessions whose skill runs changed; empty when none did.
+   */
+  refreshSession(source: SessionSource): Promise<string[]> {
+    return this.serial(async () => {
+      const inLog = (s: ParsedSession) => (source.agent === 'opencode' ? s.file.startsWith(`${source.file}#`) : s.file === source.file)
+      const before = [...this.sessions.values()].filter(inLog)
+      const after = await readSessionLog(source)
+      // An OpenCode database that cannot be read right now keeps its last sessions.
+      if (!after) return []
+      for (const s of before) this.sessions.delete(s.file)
+      for (const s of after) this.sessions.set(s.file, s)
+
+      const runsBefore = new Map(before.map((s) => [s.id, JSON.stringify(s.runs.map(fingerprint))]))
+      const runsAfter = new Map(after.map((s) => [s.id, JSON.stringify(s.runs.map(fingerprint))]))
+      const changed = [...new Set([...runsBefore.keys(), ...runsAfter.keys()])].filter((id) => (runsBefore.get(id) ?? '[]') !== (runsAfter.get(id) ?? '[]'))
+      const newProject = after.some((s) => s.cwd && !before.find((b) => b.id === s.id)?.cwd)
+      if (changed.length || newProject) await this.reindex()
+      return changed
+    })
   }
 
-  async rebuild() {
+  /** Re-scans the skills and matches every run to one, e.g. after a skill folder changed. */
+  rebuild(): Promise<void> {
+    return this.serial(() => this.reindex())
+  }
+
+  private async reindex() {
     const cwds = [...this.sessions.values()].map((s) => s.cwd).filter((c): c is string => !!c)
     const scanned = await scanSkills(getSettings(), cwds)
     const runs = [...this.sessions.values()].flatMap((s) => s.runs).sort((a, b) => b.startedAt - a.startedAt)
@@ -87,6 +144,13 @@ class Store {
         continue
       }
       const name = shortName(run.skill)
+      // The same unscanned skill run by another agent joins the entry made for the first one.
+      const known = skills.find((s) => s.key === `builtin:${name}`)
+      if (known) {
+        if (!known.agents.includes(run.agent)) known.agents.push(run.agent)
+        run.skillId = known.id
+        continue
+      }
       const onDisk = run.baseDir ? await readSkill(run.baseDir, 'builtin') : null
       const captured = parseSkillMarkdown(run.loaded ?? '')
       // Bundled skills move with every Claude Code version, so they are keyed by name, not folder.
@@ -201,7 +265,6 @@ class Store {
       enabled: settings.agents[id].enabled,
       skills: this.visibleSkills(id).length,
       runs: this.visibleRuns(id).length,
-      replay: id === 'claude-code',
     }))
   }
 
@@ -233,15 +296,16 @@ class Store {
     const status = {} as Record<AgentId, AgentStatus>
     for (const id of AGENT_IDS) {
       const a = settings.agents[id]
-      const sessionDirs = a.sessions.map((p) => resolvePath(p))
+      const dirs = a.sessions.map((p) => resolvePath(p))
       status[id] = {
         skills: await pathStatus(a.skills),
         sessions: await pathStatus(a.sessions),
         plugins: await pathStatus(a.plugins),
         skillCount: this.skills.filter((s) => s.agents.includes(id) && s.source !== 'builtin').length,
         sessionFiles:
-          id === 'claude-code' ? (await listSessionFiles(sessionDirs)).length : await countFiles(sessionDirs, /\.jsonl?$/, 20_000),
-        replay: id === 'claude-code',
+          id === 'claude-code' ? (await listSessionFiles(dirs)).length
+            : id === 'codex' ? await countFiles(dirs, /\.jsonl$/, 20_000)
+              : await countFiles(dirs, /^opencode\.db$/, 1),
       }
     }
     return {
@@ -275,8 +339,16 @@ class Store {
   }
 }
 
+/** Reads one session log in its agent's format; null when an OpenCode database cannot be read. */
+async function readSessionLog({ agent, file }: SessionSource): Promise<ParsedSession[] | null> {
+  if (agent === 'opencode') return loadOpenCodeDb(file)
+  const session = agent === 'codex' ? await parseCodexFile(file) : await parseSessionFile(file)
+  return session ? [session] : []
+}
+
 function fingerprint(r: RunDetail) {
-  return [r.id, r.status, r.events.length, r.endedAt, r.baseDir]
+  // OpenCode updates text and tool parts in place: the event count and timestamps can stay the same.
+  return [r.id, r.status, r.endedAt, r.baseDir, r.prompt, r.loaded, r.tokens, r.outcome, r.events]
 }
 
 function firstParagraph(md: string) {
@@ -302,11 +374,11 @@ function shortName(skill: string) {
 
 function matchSkill(run: RunDetail, skills: SkillEntry[]): SkillEntry | undefined {
   if (run.baseDir) {
-    const byDir = skills.find((s) => s.dir === run.baseDir)
+    const byDir = skills.find((s) => s.dir === run.baseDir && s.agents.includes(run.agent))
     if (byDir) return byDir
   }
   const name = shortName(run.skill)
-  const candidates = skills.filter((s) => s.dirName === name || s.name === name)
+  const candidates = skills.filter((s) => (s.dirName === name || s.name === name) && s.agents.includes(run.agent))
   // Prefer the project-level skill from the run's own working directory.
   return (
     candidates.find((s) => s.source === 'project' && run.cwd && s.dir.startsWith(run.cwd + path.sep)) ??

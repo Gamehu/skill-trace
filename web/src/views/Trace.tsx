@@ -4,6 +4,7 @@ import type { RunDetail } from '../../../server/types.ts'
 import { AgentTag } from '../components/Scope.tsx'
 import { Empty, PageHeader, Segmented, StatusPill } from '../components/ui.tsx'
 import { useApi, useNow } from '../lib/api.ts'
+import { agentLabel } from '../lib/agents.ts'
 import { compact, dateTime, duration, shortId } from '../lib/format.ts'
 import { buildItems, isHumanItem, jumpTo } from './trace/items.ts'
 import { Glance, Replay } from './trace/Replay.tsx'
@@ -52,6 +53,7 @@ export function TraceView({ id }: { id: string }) {
   if (error) return <Empty title="Run not found.">The transcript may have been deleted.</Empty>
   if (!run) return null
 
+  const agentName = agentLabel(run.agent)
   const end = live ? Math.max(now, run.endedAt) : run.endedAt
   const rows = run.events.filter((e): e is Row => e.type !== 'thinking')
   const sel = rows.find((r) => r.id === selected) ?? null
@@ -97,7 +99,7 @@ export function TraceView({ id }: { id: string }) {
             <StatusPill status={run.status} errors={run.errors} />
             <AgentTag agent={run.agent} />
             <span>{run.project}</span>
-            <span className="text-muted">{run.trigger === 'slash' ? 'via /command' : 'invoked by Claude'}</span>
+            <span className="text-muted">{run.trigger === 'slash' ? 'via /command' : `loaded by ${agentName}`}</span>
             {run.model && <span className="font-mono text-[11.5px] text-muted">{run.model}</span>}
             <span className="tnum text-muted">{dateTime(run.startedAt)}</span>
             <span className="font-mono text-[11.5px] text-faint" title={run.sessionId}>
@@ -171,17 +173,17 @@ export function TraceView({ id }: { id: string }) {
               <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3 px-6">
                 <span className="label text-fg-2">{rows.length} steps</span>
                 <span className="text-[12px] text-muted">
-                  <Legend rows={rows} />
+                  <Legend rows={rows} agentName={agentName} />
                 </span>
               </div>
               {rows.length === 0 ? (
                 <p className="px-6 pb-6 text-muted">{live ? 'Waiting for the first step…' : 'This run made no tool calls.'}</p>
               ) : (
-                <Waterfall rows={rows} start={run.startedAt} end={end} now={now} live={live} selected={selected} onSelect={setSelected} />
+                <Waterfall rows={rows} start={run.startedAt} end={end} now={now} live={live} selected={selected} onSelect={setSelected} agentName={agentName} />
               )}
             </section>
             <aside className="glass min-w-0 self-start xl:sticky xl:top-44 xl:max-h-[calc(100dvh-12rem)] xl:overflow-y-auto">
-              <Inspector row={sel} runStart={run.startedAt} now={now} live={live} />
+              <Inspector row={sel} runStart={run.startedAt} now={now} live={live} agentName={agentName} />
             </aside>
           </div>
         )}

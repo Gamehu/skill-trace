@@ -30,7 +30,7 @@ function rowLabel(r: Row): { title: string; detail: string } {
   }
 }
 
-export function Legend({ rows }: { rows: Row[] }) {
+export function Legend({ rows, agentName }: { rows: Row[]; agentName: string }) {
   const present = new Set(rows.flatMap((r) => (r.type === 'tool' ? [r.kind] : [])))
   return (
     <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -49,7 +49,7 @@ export function Legend({ rows }: { rows: Row[] }) {
       {rows.some((r) => r.type === 'text') && (
         <span className="inline-flex items-center gap-1.5">
           <span className="size-2 rounded-full border border-fg-2" />
-          Claude
+          {agentName}
         </span>
       )}
     </span>
@@ -64,9 +64,10 @@ interface WaterfallProps {
   live: boolean
   selected: string | null
   onSelect: (id: string | null) => void
+  agentName: string
 }
 
-export function Waterfall({ rows, start, end, now, live, selected, onSelect }: WaterfallProps) {
+export function Waterfall({ rows, start, end, now, live, selected, onSelect, agentName }: WaterfallProps) {
   // A live run gets a stable axis that extends past "now", so bars do not shift on every tick.
   const total = axisSpan(end - start, live)
   const x = useMemo(() => scaleLinear().domain([0, total]).range([0, 100]), [total])
@@ -184,7 +185,7 @@ export function Waterfall({ rows, start, end, now, live, selected, onSelect }: W
                     <span className="shrink-0 font-mono text-[12px] text-signal">{title}</span>
                     <span className="truncate text-fg-2">{detail}</span>
                   </span>
-                  <span className="relative h-full" title="Time Claude waited for you">
+                  <span className="relative h-full" title={`Time ${agentName} waited for you`}>
                     <span
                       className={`absolute top-1/2 h-3.5 -translate-y-1/2 rounded-[4px] border border-signal/70 ${r.answeredAt === null && live ? 'bar-live' : ''}`}
                       style={{
@@ -253,7 +254,7 @@ export function Waterfall({ rows, start, end, now, live, selected, onSelect }: W
   )
 }
 
-export function Inspector({ row, runStart, now, live }: { row: Row | null; runStart: number; now: number; live: boolean }) {
+export function Inspector({ row, runStart, now, live, agentName }: { row: Row | null; runStart: number; now: number; live: boolean; agentName: string }) {
   if (!row)
     return (
       <div className="p-6">
@@ -264,7 +265,7 @@ export function Inspector({ row, runStart, now, live }: { row: Row | null; runSt
     )
 
   const at = row.type === 'tool' ? row.start : row.at
-  const head = <SectionTitle aside={<span className="tnum font-mono">+{duration(at - runStart)}</span>}>{row.type === 'tool' ? 'Step' : row.type === 'text' ? 'Claude' : 'You'}</SectionTitle>
+  const head = <SectionTitle aside={<span className="tnum font-mono">+{duration(at - runStart)}</span>}>{row.type === 'tool' ? 'Step' : row.type === 'text' ? agentName : 'You'}</SectionTitle>
 
   if (row.type === 'text')
     return (
@@ -277,7 +278,7 @@ export function Inspector({ row, runStart, now, live }: { row: Row | null; runSt
     return (
       <div className="p-6">
         {head}
-        {row.type === 'ask' ? <AskCard ev={row} live={live} /> : row.type === 'plan' ? <PlanCard ev={row} live={live} /> : <HumanBubble ev={row} />}
+        {row.type === 'ask' ? <AskCard ev={row} live={live} agentName={agentName} /> : row.type === 'plan' ? <PlanCard ev={row} live={live} /> : <HumanBubble ev={row} />}
       </div>
     )
 

@@ -53,7 +53,8 @@ export function toolKind(name: string): ToolKind {
   }
 }
 
-function clip(s: string, max = MAX_TEXT) {
+/** Cuts long text, saying how much was left out. */
+export function clip(s: string, max = MAX_TEXT) {
   return s.length > max ? `${s.slice(0, max)}\n… (${s.length - max} more characters)` : s
 }
 
@@ -105,7 +106,8 @@ function blockText(content: unknown): string {
     .join('\n')
 }
 
-function firstLine(s: string, max = 240) {
+/** The first non-empty line, cut to `max` characters, for one-line step summaries. */
+export function firstLine(s: string, max = 240) {
   const line = s.trim().split('\n').find((l) => l.trim()) ?? ''
   return line.length > max ? `${line.slice(0, max)}…` : line
 }
@@ -213,7 +215,8 @@ function finalText(events: TraceEvent[]): string | null {
   return texts.length ? texts.map((e) => (e.type === 'text' ? e.text : '')).join('\n\n') : null
 }
 
-function plainSummary(md: string | null): string | null {
+/** The opening lines of a Markdown reply as plain text, for the run's one-line result. */
+export function plainSummary(md: string | null): string | null {
   if (!md) return null
   const lines = md
     .split('\n')
@@ -228,6 +231,36 @@ function plainSummary(md: string | null): string | null {
     .filter(Boolean)
   const s = lines.slice(0, 3).join(' · ')
   return s.length > 280 ? `${s.slice(0, 280)}…` : s || null
+}
+
+type RunStart = Pick<RunDetail, 'id' | 'agent' | 'skill' | 'args' | 'trigger' | 'sessionId' | 'project' | 'cwd' | 'prompt' | 'input' | 'startedAt' | 'model'>
+
+/** A run that has just started: nothing recorded yet, status running. Every agent's parser starts its runs here. */
+export function newRun(start: RunStart): RunDetail {
+  return {
+    ...start,
+    skillId: null,
+    status: 'running',
+    endedAt: start.startedAt,
+    toolCalls: 0,
+    errors: 0,
+    tokens: emptyUsage(),
+    shape: [],
+    result: null,
+    humanTurns: 0,
+    filesChanged: 0,
+    outcome: { text: null, files: [] },
+    baseDir: null,
+    loaded: null,
+    events: [],
+  }
+}
+
+/** Each step of a run as [start offset, duration, kind], for its shape strip; a step still open lasts until the run's end. */
+export function toolShape(run: RunDetail): RunDetail['shape'] {
+  return run.events
+    .filter((e): e is ToolEvent => e.type === 'tool')
+    .map((e) => [e.start - run.startedAt, Math.max(0, (e.end ?? run.endedAt) - e.start), e.kind])
 }
 
 export function parseTranscript(
@@ -285,34 +318,20 @@ export function parseTranscript(
   const start = (id: string, skill: string, args: string | null, trigger: RunTrigger, ts: number) => {
     finish()
     active = {
-      run: {
+      run: newRun({
         id,
         agent: 'claude-code',
         skill,
-        skillId: null,
         args,
         trigger,
-        status: 'running',
         sessionId: meta.sessionId,
         project: meta.project,
         cwd,
         prompt: trigger === 'slash' ? `/${skill}${args ? ` ${args}` : ''}` : lastPrompt,
         input: trigger === 'slash' ? (args ?? null) : lastInput,
         startedAt: ts,
-        endedAt: ts,
-        toolCalls: 0,
-        errors: 0,
-        tokens: emptyUsage(),
-        shape: [],
-        result: null,
-        humanTurns: 0,
-        filesChanged: 0,
-        outcome: { text: null, files: [] },
-        baseDir: null,
-        loaded: null,
         model,
-        events: [],
-      },
+      }),
       msgIds: new Set(),
       lastTs: ts,
       endTurn: false,
@@ -500,9 +519,7 @@ export function parseTranscript(
 
   for (const run of runs) {
     if (run.model === null) run.model = model
-    run.shape = run.events
-      .filter((e): e is ToolEvent => e.type === 'tool')
-      .map((e) => [e.start - run.startedAt, Math.max(0, (e.end ?? run.endedAt) - e.start), e.kind])
+    run.shape = toolShape(run)
   }
   return { runs, cwd }
 }

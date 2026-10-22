@@ -42,8 +42,6 @@ export interface AgentStatus {
   plugins: PathStatus[]
   skillCount: number
   sessionFiles: number
-  /** Whether this agent's sessions can be replayed yet (skills are listed either way). */
-  replay: boolean
 }
 
 export interface SettingsPayload {
@@ -134,6 +132,8 @@ export type TraceEvent =
       kind: ToolKind
       summary: string
       input: string
+      /** File path supplied separately when a tool input was truncated in the session log query. */
+      filePath?: string
       output: string | null
       isError: boolean
       start: number

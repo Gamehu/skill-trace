@@ -6,7 +6,7 @@
 
 **把编程助手跑过的每一次 Skill 完整回放出来：你提了什么、中途做了哪些决定、最后交付了什么。**
 
-一个本地运行、只读的看板，支持 **Claude Code** 的 Skill，同时能列出 **Codex** 和 **OpenCode** 的 Skill。
+一个本地运行、只读的看板，支持 **Claude Code**、**Codex** 和 **OpenCode** 的 Skill 列表与运行回放。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-ff6a3d.svg)](LICENSE)
 ![Node 20.19+](https://img.shields.io/badge/node-%E2%89%A520.19-3dd6a3.svg)
@@ -141,8 +141,10 @@ flowchart LR
 | 工具 | Skill 列表 | 运行回放 | 默认目录 |
 |---|:---:|:---:|---|
 | Claude Code | ✅ | ✅ | `~/.claude/skills`、`~/.claude/plugins`，会话在 `~/.claude/projects` |
-| Codex | ✅ | 计划中 | `~/.codex/skills`、`/etc/codex/skills`，会话在 `~/.codex/sessions` |
-| OpenCode | ✅ | 计划中 | `~/.config/opencode/skills`，数据在 `~/.local/share/opencode` |
+| Codex | ✅ | ✅ | `~/.codex/skills`、`~/.agents/skills`、`~/.codex/plugins/cache` 中的缓存插件 Skill、`/etc/codex/skills`，会话在 `~/.codex/sessions` |
+| OpenCode | ✅ | ✅ | `~/.config/opencode/skills`、`~/.agents/skills`，数据在 `~/.local/share/opencode` |
+
+Codex 的运行根据日志中可观察到的 `SKILL.md` 读取推断；未留下文件读取记录的 Skill 可能漏记。OpenCode 从 `opencode.db` 的 `skill` 工具记录读取运行。Node 20 还需要系统安装 `sqlite3` 命令才能读取 OpenCode 运行。
 
 会遵循各工具自己的环境变量（`CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`XDG_CONFIG_HOME`、`XDG_DATA_HOME`），所有目录都能在 **Settings** 里修改。
 
@@ -180,7 +182,7 @@ flowchart LR
 <details>
 <summary><b>为什么看不到 Codex 或 OpenCode 的运行记录？</b></summary>
 
-目前能列出它们的 Skill。回放它们的会话需要适配各自的记录格式，已在计划中。
+请先在 **Settings** 检查会话目录。Codex 的 JSONL 会话需要留下 `SKILL.md` 读取记录；OpenCode 的 `opencode.db` 需要有 `skill` 工具记录。Node 20 还需要系统安装 `sqlite3` 命令。
 </details>
 
 <details>
@@ -209,7 +211,7 @@ bin/               命令行入口
 
 ## 路线图
 
-- [ ] Codex 和 OpenCode 的运行回放
+- [x] Codex 和 OpenCode 的运行回放
 - [ ] 展开子代理内部的步骤
 - [ ] 无需克隆，直接 `npx skill-trace`
 

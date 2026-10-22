@@ -14,8 +14,6 @@ export interface AgentInfo {
   enabled: boolean
   skills: number
   runs: number
-  /** Whether this agent's sessions can be replayed yet. */
-  replay: boolean
 }
 
 /**

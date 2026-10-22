@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link, useLocation } from 'wouter'
 import type { RunStatus, RunSummary } from '../../../server/types.ts'
 import { Shape } from '../components/Shape.tsx'
-import { AgentTag, ReplayNotYet, ScopeTabs } from '../components/Scope.tsx'
+import { AgentTag, ScopeTabs } from '../components/Scope.tsx'
 import { Empty, PageHeader, SearchInput, Segmented, StatusDot } from '../components/ui.tsx'
-import { agentLabel, scoped, useScope, type AgentInfo } from '../lib/agents.ts'
+import { agentLabel, scoped, useScope } from '../lib/agents.ts'
 import { useApi, useNow } from '../lib/api.ts'
 import { ago, duration } from '../lib/format.ts'
 
@@ -114,7 +114,6 @@ export function RunTable({ runs, showSkill = true }: RunTableProps) {
 export function RunsView() {
   const [scope] = useScope()
   const { data, error } = useApi<RunSummary[]>(scoped('/api/runs', scope))
-  const { data: agents } = useApi<AgentInfo[]>('/api/agents')
   const [status, setStatus] = useState<'all' | RunStatus>('all')
   const [q, setQ] = useState('')
 
@@ -129,7 +128,6 @@ export function RunsView() {
 
   if (error) return <Empty title="Could not load runs.">{error}</Empty>
   if (!data) return null
-  const noReplay = !!scope && agents?.find((a) => a.id === scope)?.replay === false
 
   const needle = q.toLowerCase()
   const rows = data.filter(
@@ -150,28 +148,22 @@ export function RunsView() {
       />
       <div className="rise space-y-3 px-6 pb-6 sm:px-10" style={{ ['--i' as string]: 1 }}>
         <ScopeTabs count="runs" />
-        {!noReplay && (
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="label text-[10px]">Status</span>
-            <Segmented
-              value={status}
-              onChange={setStatus}
-              options={[
-                { value: 'all', label: 'All', count: counts.all },
-                { value: 'running', label: 'Running', count: counts.running },
-                { value: 'waiting', label: 'Waiting for you', count: counts.waiting },
-                { value: 'done', label: 'Done', count: counts.done },
-                { value: 'interrupted', label: 'Interrupted', count: counts.interrupted },
-              ]}
-            />
-          </div>
-        )}
-      </div>
-      {noReplay ? (
-        <div className="px-6 sm:px-10">
-          <ReplayNotYet agent={scope} />
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="label text-[10px]">Status</span>
+          <Segmented
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: 'all', label: 'All', count: counts.all },
+              { value: 'running', label: 'Running', count: counts.running },
+              { value: 'waiting', label: 'Waiting for you', count: counts.waiting },
+              { value: 'done', label: 'Done', count: counts.done },
+              { value: 'interrupted', label: 'Interrupted', count: counts.interrupted },
+            ]}
+          />
         </div>
-      ) : rows.length === 0 ? (
+      </div>
+      {rows.length === 0 ? (
         <Empty title={data.length ? 'Nothing matches.' : 'No runs yet.'}>
           {!data.length && 'Use a tracked skill and it will show up here while it runs.'}
         </Empty>

@@ -97,10 +97,15 @@ function restartWatcher() {
   const debounce = debouncer(250)
   const roots = store.watchRoots()
   const stopSessions = watchTrees(roots.sessions, (file) => {
-    if (!store.isSessionFile(file)) return
-    debounce(file, async () => {
-      const id = await store.refreshSession(file)
-      if (id) broadcast({ type: 'update', sessions: [id] })
+    const source = store.sessionSource(file)
+    if (!source) return
+    debounce(source.file, async () => {
+      const ids = await store.refreshSession(source).catch((err: unknown) => {
+        // Live updates are best-effort: one unreadable log must not crash the server.
+        console.warn(`skill-trace: cannot read ${source.file}: ${err instanceof Error ? err.message : String(err)}`)
+        return []
+      })
+      if (ids.length) broadcast({ type: 'update', sessions: ids })
     })
   })
   const stopSkills = watchTrees(roots.skills, () =>

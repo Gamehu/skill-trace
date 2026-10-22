@@ -12,9 +12,10 @@ function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
       aria-checked={on}
       aria-label={label}
       onClick={() => onChange(!on)}
-      className={`relative h-6 w-10 shrink-0 rounded-full border transition-colors ${on ? 'border-fg bg-fg' : 'border-line-strong bg-raised'}`}
+      // Sized in px, not the rem scale: the root font is 13px, so rem sizes shrank the track under the knob.
+      className={`flex h-[20px] w-[36px] shrink-0 items-center rounded-full border px-[2px] transition-colors ${on ? 'border-fg bg-fg' : 'border-line-strong bg-raised'}`}
     >
-      <span className={`absolute top-0.5 size-[18px] rounded-full transition-all ${on ? 'left-[18px] bg-bg' : 'left-0.5 bg-muted'}`} />
+      <span className={`size-[14px] rounded-full transition-[translate,background-color] ${on ? 'translate-x-[16px] bg-bg' : 'bg-muted'}`} />
     </button>
   )
 }
@@ -93,8 +94,7 @@ function AgentCard({ id, label, draft, defaults, payload, onChange }: {
               ? 'Turned off: nothing is read from it.'
               : found
                 ? `${st.skillCount} skill${st.skillCount === 1 ? '' : 's'} and ${st.sessionFiles.toLocaleString()}${st.sessionFiles >= 20_000 ? '+' : ''} session file${st.sessionFiles === 1 ? '' : 's'} found.`
-                : 'Nothing found in these folders. Is it installed somewhere else?'}{' '}
-            {st.replay ? 'Its runs are replayed.' : 'Its skills are listed; replaying its runs is not supported yet.'}
+                : 'Nothing found in these folders. Is it installed somewhere else?'}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -123,10 +123,12 @@ function AgentCard({ id, label, draft, defaults, payload, onChange }: {
             statuses={st.sessions}
             onChange={(sessions) => onChange({ ...draft, sessions })}
           />
-          {id === 'claude-code' && (
+          {id !== 'opencode' && (
             <FolderList
               label="Plugins"
-              hint="The folder with installed_plugins.json; only installed plugin versions are read."
+              hint={id === 'claude-code'
+                ? 'The folder with installed_plugins.json; only installed plugin versions are read.'
+                : 'Codex plugin cache; skill files found here are listed as plugin skills.'}
               values={draft.plugins}
               statuses={st.plugins}
               onChange={(plugins) => onChange({ ...draft, plugins })}

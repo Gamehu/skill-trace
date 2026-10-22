@@ -83,13 +83,18 @@ export function FileChanges({ files }: { files: FileChange[] }) {
                 {f.op === 'create' ? 'new' : 'edit'}
               </span>
               <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-fg">{f.path}</span>
-              <span className="tnum shrink-0 font-mono text-[11.5px]">
-                <span className="text-ok">+{f.additions}</span> <span className="text-err">−{f.deletions}</span>
-              </span>
-              <DeltaBlocks add={f.additions} del={f.deletions} />
+              {f.edits.length > 0 && (
+                <>
+                  <span className="tnum shrink-0 font-mono text-[11.5px]">
+                    <span className="text-ok">+{f.additions}</span> <span className="text-err">−{f.deletions}</span>
+                  </span>
+                  <DeltaBlocks add={f.additions} del={f.deletions} />
+                </>
+              )}
             </button>
             {isOpen && (
               <div className="border-t border-line bg-panel-solid py-2">
+                {f.edits.length === 0 && <p className="px-4 py-2 text-[12px] text-muted">The file was changed; its diff was not recorded. See the tool step above for details.</p>}
                 {f.edits.map((e, i) => (
                   <div key={i} className={i ? 'mt-2 border-t border-dashed border-line pt-2' : ''}>
                     <Hunk edit={e} limit={full ? Infinity : 60} />

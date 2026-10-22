@@ -6,7 +6,7 @@
 
 **Replay every skill your coding agent runs: what you asked, what you decided, and what it delivered.**
 
-A local, read-only dashboard for **Claude Code** skills, which also lists **Codex** and **OpenCode** skills.
+A local, read-only dashboard for **Claude Code**, **Codex**, and **OpenCode** skills and runs.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-ff6a3d.svg)](LICENSE)
 ![Node 20.19+](https://img.shields.io/badge/node-%E2%89%A520.19-3dd6a3.svg)
@@ -141,8 +141,10 @@ flowchart LR
 | Tool | Skills | Run replay | Default folders |
 |---|:---:|:---:|---|
 | Claude Code | ✅ | ✅ | `~/.claude/skills`, `~/.claude/plugins`, sessions in `~/.claude/projects` |
-| Codex | ✅ | Planned | `~/.codex/skills`, `/etc/codex/skills`, sessions in `~/.codex/sessions` |
-| OpenCode | ✅ | Planned | `~/.config/opencode/skills`, data in `~/.local/share/opencode` |
+| Codex | ✅ | ✅ | `~/.codex/skills`, `~/.agents/skills`, cached plugin skills in `~/.codex/plugins/cache`, `/etc/codex/skills`, sessions in `~/.codex/sessions` |
+| OpenCode | ✅ | ✅ | `~/.config/opencode/skills`, `~/.agents/skills`, data in `~/.local/share/opencode` |
+
+Codex runs are inferred from recorded `SKILL.md` reads, so skills activated without an observable file read may be missed. OpenCode runs use its `skill` tool records in `opencode.db`. On Node 20, OpenCode replay also needs the `sqlite3` command available.
 
 Each tool's own environment variables are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`), and every folder can be changed in **Settings**.
 
@@ -180,7 +182,7 @@ Open **Settings** and check that its folder is listed and marked *Found*, and th
 <details>
 <summary><b>Why are there no runs from Codex or OpenCode?</b></summary>
 
-Their skills are listed today. Replaying their sessions needs support for their log formats, which is on the roadmap.
+Check the agent's session folder in **Settings**. Codex needs recorded `SKILL.md` reads in its JSONL sessions. OpenCode needs an `opencode.db` with `skill` tool records; Node 20 also needs the `sqlite3` command.
 </details>
 
 <details>
@@ -209,7 +211,7 @@ Built with TypeScript, [Hono](https://hono.dev), [Vite](https://vite.dev), [Reac
 
 ## Roadmap
 
-- [ ] Run replay for Codex and OpenCode
+- [x] Run replay for Codex and OpenCode
 - [ ] Steps inside subagents
 - [ ] `npx skill-trace` without cloning
 
