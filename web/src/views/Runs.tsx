@@ -3,7 +3,7 @@ import { Link, useLocation } from 'wouter'
 import type { RunStatus, RunSummary } from '../../../server/types.ts'
 import { Shape } from '../components/Shape.tsx'
 import { AgentTag, ScopeTabs } from '../components/Scope.tsx'
-import { Empty, PageHeader, SearchInput, Segmented, StatusDot } from '../components/ui.tsx'
+import { Empty, FilterChips, PageHeader, SearchInput, StatusDot } from '../components/ui.tsx'
 import { agentLabel, scoped, useScope } from '../lib/agents.ts'
 import { useApi, useNow } from '../lib/api.ts'
 import { ago, duration } from '../lib/format.ts'
@@ -111,6 +111,13 @@ export function RunTable({ runs, showSkill = true }: RunTableProps) {
   )
 }
 
+const STATUSES: [RunStatus, string][] = [
+  ['running', 'Running'],
+  ['waiting', 'Waiting for you'],
+  ['done', 'Done'],
+  ['interrupted', 'Interrupted'],
+]
+
 export function RunsView() {
   const [scope] = useScope()
   const { data, error } = useApi<RunSummary[]>(scoped('/api/runs', scope))
@@ -144,23 +151,20 @@ export function RunsView() {
           </>
         }
         meta={<span>Every run of a tracked skill found in the session logs, newest first.</span>}
-        actions={<SearchInput value={q} onChange={setQ} placeholder="Skill, request, result or project" />}
       />
-      <div className="rise space-y-3 px-6 pb-6 sm:px-10" style={{ ['--i' as string]: 1 }}>
+      <div className="rise space-y-4 px-6 pb-4 sm:px-10" style={{ ['--i' as string]: 1 }}>
         <ScopeTabs count="runs" />
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="label text-[10px]">Status</span>
-          <Segmented
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <FilterChips
+            label="Status"
             value={status}
             onChange={setStatus}
             options={[
               { value: 'all', label: 'All', count: counts.all },
-              { value: 'running', label: 'Running', count: counts.running },
-              { value: 'waiting', label: 'Waiting for you', count: counts.waiting },
-              { value: 'done', label: 'Done', count: counts.done },
-              { value: 'interrupted', label: 'Interrupted', count: counts.interrupted },
+              ...STATUSES.map(([value, label]) => ({ value, label, count: counts[value], dot: <StatusDot status={value} still /> })),
             ]}
           />
+          <SearchInput value={q} onChange={setQ} placeholder="Skill, request, result or project" />
         </div>
       </div>
       {rows.length === 0 ? (

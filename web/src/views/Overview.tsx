@@ -14,10 +14,7 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 function Hero({ totals, running, scope }: { totals: Overview['totals']; running: number; scope: AgentScope }) {
   return (
-    <section className="rise px-6 pb-10 pt-10 sm:px-10">
-      <div className="mb-6">
-        <ScopeTabs count="runs" />
-      </div>
+    <section className="rise px-6 pb-8 pt-10 sm:px-10">
       <div className="label mb-5">Overview · {scope ? agentLabel(scope) : 'all tools'} · all time on this machine</div>
       <h1 className="display max-w-5xl text-[52px] text-fg sm:text-[72px]">
         <span className="tnum italic text-signal">{totals.runs.toLocaleString()}</span> skill runs,{' '}
@@ -33,6 +30,9 @@ function Hero({ totals, running, scope }: { totals: Overview['totals']; running:
           'Nothing is running right now.'
         )}
       </p>
+      <div className="mt-8">
+        <ScopeTabs count="runs" />
+      </div>
     </section>
   )
 }
