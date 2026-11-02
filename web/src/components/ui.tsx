@@ -33,19 +33,21 @@ const STATUS: Record<RunStatus, string> = {
 interface StatusProps {
   status: RunStatus
   errors?: number
+  /** No ping or glow, for legends and filters. */
+  still?: boolean
 }
 
-export function StatusDot({ status, errors = 0 }: StatusProps) {
+export function StatusDot({ status, errors = 0, still = false }: StatusProps) {
   const failed = errors > 0 && status !== 'running'
   const label = failed ? `${STATUS[status]} with ${errors} error${errors > 1 ? 's' : ''}` : STATUS[status]
   const active = status === 'running' || status === 'waiting'
   const color = active ? 'bg-signal' : failed ? 'bg-err' : status === 'interrupted' ? 'bg-warn' : 'bg-faint'
   return (
     <span className="relative inline-flex size-2 shrink-0" title={label} aria-label={label}>
-      {active && <span className={`absolute inset-0 rounded-full bg-signal ${status === 'waiting' ? 'motion-safe:animate-pulse' : 'motion-safe:animate-ping'}`} />}
+      {active && !still && <span className={`absolute inset-0 rounded-full bg-signal ${status === 'waiting' ? 'motion-safe:animate-pulse' : 'motion-safe:animate-ping'}`} />}
       <span
         className={`relative size-2 ${status === 'waiting' ? 'rotate-45 rounded-[2px]' : 'rounded-full'} ${color}`}
-        style={active ? { boxShadow: '0 0 10px var(--signal)' } : undefined}
+        style={active && !still ? { boxShadow: '0 0 10px var(--signal)' } : undefined}
       />
     </span>
   )
@@ -193,6 +195,41 @@ export function Segmented<T extends string>({ value, onChange, options }: Segmen
   )
 }
 
+interface FilterChipsProps<T extends string> {
+  value: T
+  onChange: (v: T) => void
+  label: string
+  options: { value: T; label: string; count: number; dot?: ReactNode }[]
+}
+
+/** Quiet filter buttons for the toolbar above a list. Options with nothing in them can't be picked. */
+export function FilterChips<T extends string>({ value, onChange, label, options }: FilterChipsProps<T>) {
+  return (
+    <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label={label}>
+      {options.map((o) => {
+        const on = value === o.value
+        const empty = o.count === 0 && !on
+        return (
+          <button
+            key={o.value}
+            role="radio"
+            aria-checked={on}
+            disabled={empty}
+            onClick={() => onChange(o.value)}
+            className={`flex h-8 items-center gap-2 rounded-full px-3 text-[12.5px] transition-colors ${
+              on ? 'bg-raised text-fg ring-1 ring-line-strong' : empty ? 'cursor-default text-faint' : 'text-muted hover:bg-hover hover:text-fg'
+            }`}
+          >
+            {o.dot && <span className={`flex ${empty ? 'opacity-40' : ''}`}>{o.dot}</span>}
+            {o.label}
+            <span className={`tnum font-mono text-[11px] ${on ? 'text-fg-2' : 'text-faint'}`}>{o.count}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 interface SearchInputProps {
   value: string
   onChange: (v: string) => void
@@ -211,7 +248,7 @@ export function SearchInput({ value, onChange, placeholder }: SearchInputProps) 
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         spellCheck={false}
-        className="h-9 w-64 rounded-full border border-line bg-panel pl-9 pr-4 text-[13px] text-fg outline-none backdrop-blur transition-colors placeholder:text-faint focus:border-signal/60 focus:shadow-[0_0_0_4px_var(--signal-soft)] max-sm:w-full"
+        className="h-9 w-72 rounded-full border border-line bg-panel pl-9 pr-4 text-[13px] text-fg outline-none backdrop-blur transition-colors placeholder:text-faint focus:border-signal/60 focus:shadow-[0_0_0_4px_var(--signal-soft)] max-sm:w-full"
       />
     </label>
   )

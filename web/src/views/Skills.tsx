@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'wouter'
 import type { SkillSource, SkillSummary } from '../../../server/types.ts'
 import { AgentTags, ScopeTabs } from '../components/Scope.tsx'
-import { Empty, PageHeader, SearchInput, Segmented, SourceTag, Sparkline } from '../components/ui.tsx'
+import { Empty, FilterChips, PageHeader, SearchInput, SourceTag, Sparkline } from '../components/ui.tsx'
 import { agentLabel, scoped, useScope } from '../lib/agents.ts'
 import { useApi, useNow } from '../lib/api.ts'
 import { ago, duration } from '../lib/format.ts'
@@ -10,7 +10,7 @@ import { ago, duration } from '../lib/format.ts'
 type Filter = 'all' | SkillSource
 
 const FILTERS: [Filter, string][] = [
-  ['all', 'All'],
+  ['all', 'All types'],
   ['user', 'User'],
   ['project', 'Project'],
   ['plugin', 'Plugin'],
@@ -126,17 +126,17 @@ export function SkillsView() {
             )}
           </span>
         }
-        actions={<SearchInput value={q} onChange={setQ} placeholder="Filter skills" />}
       />
-      <div className="rise space-y-3 px-6 pb-8 sm:px-10" style={{ ['--i' as string]: 1 }}>
+      <div className="rise space-y-4 px-6 pb-8 sm:px-10" style={{ ['--i' as string]: 1 }}>
         <ScopeTabs count="skills" />
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="label text-[10px]">Type</span>
-          <Segmented
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <FilterChips
+            label="Where the skill is installed"
             value={filter}
             onChange={setFilter}
             options={FILTERS.filter(([v]) => v === 'all' || counts[v] > 0).map(([value, label]) => ({ value, label, count: counts[value] }))}
           />
+          <SearchInput value={q} onChange={setQ} placeholder="Filter skills" />
         </div>
       </div>
 
