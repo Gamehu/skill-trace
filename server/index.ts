@@ -18,6 +18,21 @@ const app = new Hono()
 const subscribers = new Set<(e: ServerEvent) => void>()
 const broadcast = (e: ServerEvent) => subscribers.forEach((fn) => fn(e))
 
+/**
+ * The socket binds well before the multi-second index build finishes, so a dev proxy never sees a
+ * refused connection. Every /api route holds until the store is ready, then answers normally.
+ */
+const t0 = Date.now()
+const ready: Promise<void> = (async () => {
+  await loadSettings()
+  await store.init()
+  restartWatcher()
+})()
+app.use('/api/*', async (_c, next) => {
+  await ready
+  return next()
+})
+
 /** `?agent=codex` scopes a query to one agent; anything else means all agents. */
 const scopeOf = (c: Context): AgentScope => AGENT_IDS.find((id) => id === c.req.query('agent')) ?? null
 
@@ -120,15 +135,18 @@ function restartWatcher() {
   }
 }
 
-const t0 = Date.now()
-await loadSettings()
-await store.init()
-restartWatcher()
+serve({ fetch: app.fetch, port: PORT, hostname: '127.0.0.1' }, ({ port }) =>
+  ready
+    .then(() => {
+      const skills = store.listSkills()
+      const runs = store.listRuns({}).length
+      console.log(`skill-trace  settings ${settingsFile()}`)
+      console.log(`             ${skills.length} skills, ${runs} runs indexed in ${Date.now() - t0}ms`)
+      console.log(`             http://localhost:${port}`)
+    })
+    .catch((err: unknown) => {
+      console.error(`skill-trace: failed to index: ${err instanceof Error ? err.stack : String(err)}`)
+      process.exit(1)
+    }),
+)
 
-serve({ fetch: app.fetch, port: PORT, hostname: '127.0.0.1' }, ({ port }) => {
-  const skills = store.listSkills()
-  const runs = store.listRuns({}).length
-  console.log(`skill-trace  settings ${settingsFile()}`)
-  console.log(`             ${skills.length} skills, ${runs} runs indexed in ${Date.now() - t0}ms`)
-  console.log(`             http://localhost:${port}`)
-})

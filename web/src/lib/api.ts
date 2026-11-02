@@ -71,22 +71,34 @@ export function useApi<T>(path: string | null): UseApiResult<T> {
       setLoading(true)
     }
     const ctrl = new AbortController()
-    fetch(path, { signal: ctrl.signal })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(r.status === 404 ? 'Not found' : `HTTP ${r.status}`)
-        return (r.headers.get('content-type')?.includes('json') ? r.json() : r.text()) as Promise<T>
-      })
-      .then((d) => {
-        setData(d)
-        setError(null)
-      })
-      .catch((e: Error) => {
-        if (e.name !== 'AbortError') setError(e.message)
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setLoading(false)
-      })
-    return () => ctrl.abort()
+    // The API is briefly unreachable during startup and tsx-watch restarts, and the proxy answers
+    // with 502. Retry those instead of stranding the page on an error until the next live update.
+    const run = (n: number) =>
+      fetch(path, { signal: ctrl.signal })
+        .then(async (r) => {
+          if (!r.ok) throw new Error(r.status === 404 ? 'Not found' : `HTTP ${r.status}`)
+          return (r.headers.get('content-type')?.includes('json') ? r.json() : r.text()) as Promise<T>
+        })
+        .then((d) => {
+          setData(d)
+          setError(null)
+          setLoading(false)
+        })
+        .catch((e: Error) => {
+          if (e.name === 'AbortError') return
+          if (n < 5 && (e instanceof TypeError || /HTTP 5\d\d/.test(e.message))) {
+            retry = setTimeout(() => run(n + 1), n * 800)
+            return
+          }
+          setError(e.message)
+          setLoading(false)
+        })
+    let retry: ReturnType<typeof setTimeout>
+    run(1)
+    return () => {
+      ctrl.abort()
+      clearTimeout(retry)
+    }
   }, [path, version])
 
   return { data, error, loading }
