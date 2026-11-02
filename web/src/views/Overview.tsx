@@ -60,7 +60,7 @@ function LiveMonitor({ running }: { running: RunSummary[] }) {
                   {r.status === 'waiting' ? (
                     <span className="label shrink-0 text-signal">Waiting for you</span>
                   ) : (
-                    <span className="tnum font-mono text-[20px] text-signal">{duration(now - r.startedAt)}</span>
+                    <span className="tnum font-mono text-[20px] text-signal">{duration(Math.max(now, r.endedAt) - r.startedAt)}</span>
                   )}
                 </div>
                 <div className="mt-1 truncate text-fg-2">{r.status === 'waiting' && r.result ? r.result : (r.prompt ?? r.project)}</div>

@@ -41,7 +41,7 @@ export function RunTable({ runs, showSkill = true }: RunTableProps) {
         </thead>
         <tbody>
           {runs.map((r) => {
-            const end = r.status === 'running' ? now : r.endedAt
+            const end = r.status === 'running' ? Math.max(now, r.endedAt) : r.endedAt
             return (
               <tr
                 key={r.id}
